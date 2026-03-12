@@ -50,7 +50,6 @@ sg.ScreenInsets = Enum.ScreenInsets.None
 
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
--- Lighting effects
 local nvColorCorrection = Instance.new("ColorCorrectionEffect")
 nvColorCorrection.TintColor = Color3.fromRGB(0, 255, 80)
 nvColorCorrection.Brightness = 0.1
@@ -119,10 +118,6 @@ dofEffect.InFocusRadius = 8
 dofEffect.Enabled = false
 dofEffect.Parent = cam
 
-local grainCC = Instance.new("ColorCorrectionEffect")
-grainCC.Enabled = false
-grainCC.Parent = Lighting
-
 local originalBrightness = Lighting.Brightness
 local originalAmbient = Lighting.Ambient
 local originalOutdoor = Lighting.OutdoorAmbient
@@ -130,7 +125,6 @@ local originalFogEnd = Lighting.FogEnd
 local originalFogStart = Lighting.FogStart
 local originalFogColor = Lighting.FogColor
 
--- Cinematic bars
 local barHeight = isMobile and 0.08 or 0.06
 
 local cineBarsTop = Instance.new("Frame", sg)
@@ -149,7 +143,6 @@ cineBarsBot.BorderSizePixel = 0
 cineBarsBot.ZIndex = 5
 cineBarsBot.Visible = false
 
--- Vignette
 local vignetteFrame = Instance.new("Frame", sg)
 vignetteFrame.Size = UDim2.new(1, 0, 1, 0)
 vignetteFrame.Position = UDim2.new(0, 0, 0, 0)
@@ -158,27 +151,20 @@ vignetteFrame.BorderSizePixel = 0
 vignetteFrame.ZIndex = 4
 vignetteFrame.Visible = false
 
-local function makeVigEdge(xScale, yScale, xSize, ySize, rotation)
+local function makeVigEdge(xScale, yScale, xSize, ySize)
     local e = Instance.new("Frame", vignetteFrame)
     e.Size = UDim2.new(xSize, 0, ySize, 0)
     e.Position = UDim2.new(xScale, 0, yScale, 0)
-    e.BackgroundTransparency = 1
+    e.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    e.BackgroundTransparency = 0.45
     e.BorderSizePixel = 0
     e.ZIndex = 4
-    local g = Instance.new("UIGradient", e)
-    g.Color = ColorSequence.new(Color3.fromRGB(0,0,0), Color3.fromRGB(0,0,0))
-    g.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.2),
-        NumberSequenceKeypoint.new(1, 1),
-    })
-    g.Rotation = rotation
 end
-makeVigEdge(0, 0, 1, 0.35, 180)
-makeVigEdge(0, 0.65, 1, 0.35, 0)
-makeVigEdge(0, 0, 0.25, 1, 90)
-makeVigEdge(0.75, 0, 0.25, 1, 270)
+makeVigEdge(0, 0, 1, 0.18)
+makeVigEdge(0, 0.82, 1, 0.18)
+makeVigEdge(0, 0, 0.12, 1)
+makeVigEdge(0.88, 0, 0.12, 1)
 
--- Film grain (mobile-safe, uses CC brightness flicker)
 local grainFrame = Instance.new("Frame", sg)
 grainFrame.Size = UDim2.new(1, 0, 1, 0)
 grainFrame.BackgroundTransparency = 1
@@ -186,23 +172,36 @@ grainFrame.BorderSizePixel = 0
 grainFrame.ZIndex = 6
 grainFrame.Visible = false
 
+local grainImage = Instance.new("ImageLabel", grainFrame)
+grainImage.Size = UDim2.new(1, 0, 1, 0)
+grainImage.Position = UDim2.new(0, 0, 0, 0)
+grainImage.BackgroundTransparency = 1
+grainImage.Image = "rbxassetid://1162950583"
+grainImage.ImageTransparency = 0.6
+grainImage.ScaleType = Enum.ScaleType.Tile
+grainImage.TileSize = UDim2.new(0, 128, 0, 128)
+grainImage.ZIndex = 6
+grainImage.ImageColor3 = Color3.fromRGB(180, 180, 180)
+
 task.spawn(function()
     while true do
         task.wait(0.05)
         if filmGrainEnabled then
-            grainCC.Brightness = (math.random() - 0.5) * 0.08
-            grainCC.Enabled = true
+            grainFrame.Visible = true
+            grainImage.ImageTransparency = 0.55 + math.random() * 0.15
+            local offset = math.random(0, 64)
+            grainImage.Position = UDim2.new(0, -offset, 0, -offset)
         else
-            grainCC.Enabled = false
+            grainFrame.Visible = false
         end
     end
 end)
 
 task.spawn(function()
     while true do
-        task.wait(0.05)
+        task.wait(0.04)
         if heartbeatEnabled then
-            local pulse = math.max(0, math.sin(tick() * 3) * 0.5 + 0.5 - 0.3) * 0.15
+            local pulse = math.max(0, math.sin(tick() * 2.5) * 0.5 + 0.5 - 0.2) * 0.25
             Lighting.Brightness = originalBrightness + pulse
         end
     end
@@ -679,7 +678,7 @@ titleLabel.BackgroundTransparency = 1
 titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleLabel.TextSize = 8
 titleLabel.Font = Enum.Font.GothamBold
-titleLabel.Text = "🎬 A Flashback (v13)      "
+titleLabel.Text = "🎬 A Flashback (v14)"
 titleLabel.TextXAlignment = Enum.TextXAlignment.Center
 
 local minimized = false
@@ -1081,7 +1080,7 @@ end); o3+=1
 
 makeFXBtn(page3, o3, "📽 Film Grain", Color3.fromRGB(50,50,50), function()
     filmGrainEnabled = not filmGrainEnabled
-    if not filmGrainEnabled then grainCC.Enabled = false end
+    if not filmGrainEnabled then grainFrame.Visible = false end
     return filmGrainEnabled
 end); o3+=1
 
@@ -1144,7 +1143,6 @@ closeBtn.MouseButton1Click:Connect(function()
     cam.FieldOfView = originalFOV
     motionBlur:Destroy()
     dofEffect:Destroy()
-    grainCC:Destroy()
     sg:Destroy()
 end)
 
