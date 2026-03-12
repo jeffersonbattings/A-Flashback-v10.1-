@@ -28,7 +28,6 @@ local smoothCamCF = nil
 local originalFOV = cam.FieldOfView
 local slotNames = {"", "", "", "", ""}
 
--- FX state
 local sepiaEnabled = false
 local bwEnabled = false
 local vhsEnabled = false
@@ -43,6 +42,12 @@ local heartbeatEnabled = false
 
 local recordBtn
 local function updateRecordBtn() end
+
+local sg = Instance.new("ScreenGui", lp.PlayerGui)
+sg.Name = "FlashbackUI"
+sg.ResetOnSpawn = false
+
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
 -- Lighting effects
 local nvColorCorrection = Instance.new("ColorCorrectionEffect")
@@ -113,6 +118,10 @@ dofEffect.InFocusRadius = 8
 dofEffect.Enabled = false
 dofEffect.Parent = cam
 
+local grainCC = Instance.new("ColorCorrectionEffect")
+grainCC.Enabled = false
+grainCC.Parent = Lighting
+
 local originalBrightness = Lighting.Brightness
 local originalAmbient = Lighting.Ambient
 local originalOutdoor = Lighting.OutdoorAmbient
@@ -120,13 +129,11 @@ local originalFogEnd = Lighting.FogEnd
 local originalFogStart = Lighting.FogStart
 local originalFogColor = Lighting.FogColor
 
--- UI overlays (parented to sg later)
-local sg = Instance.new("ScreenGui", lp.PlayerGui)
-sg.Name = "FlashbackUI"
-sg.ResetOnSpawn = false
+-- Cinematic bars
+local barHeight = isMobile and 0.08 or 0.06
 
 local cineBarsTop = Instance.new("Frame", sg)
-cineBarsTop.Size = UDim2.new(1, 0, 0, 60)
+cineBarsTop.Size = UDim2.new(1, 0, barHeight, 0)
 cineBarsTop.Position = UDim2.new(0, 0, 0, 0)
 cineBarsTop.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 cineBarsTop.BorderSizePixel = 0
@@ -134,32 +141,43 @@ cineBarsTop.ZIndex = 5
 cineBarsTop.Visible = false
 
 local cineBarsBot = Instance.new("Frame", sg)
-cineBarsBot.Size = UDim2.new(1, 0, 0, 60)
-cineBarsBot.Position = UDim2.new(0, 0, 1, -60)
+cineBarsBot.Size = UDim2.new(1, 0, barHeight, 0)
+cineBarsBot.Position = UDim2.new(0, 0, 1 - barHeight, 0)
 cineBarsBot.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 cineBarsBot.BorderSizePixel = 0
 cineBarsBot.ZIndex = 5
 cineBarsBot.Visible = false
 
-local vignetteFrame = Instance.new("ImageLabel", sg)
+-- Vignette
+local vignetteFrame = Instance.new("Frame", sg)
 vignetteFrame.Size = UDim2.new(1, 0, 1, 0)
 vignetteFrame.Position = UDim2.new(0, 0, 0, 0)
 vignetteFrame.BackgroundTransparency = 1
-vignetteFrame.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
-vignetteFrame.ImageColor3 = Color3.fromRGB(0, 0, 0)
-vignetteFrame.ImageTransparency = 0.3
-vignetteFrame.ScaleType = Enum.ScaleType.Stretch
+vignetteFrame.BorderSizePixel = 0
 vignetteFrame.ZIndex = 4
 vignetteFrame.Visible = false
--- Use a UIGradient for vignette effect
-local vigGrad = Instance.new("UIGradient", vignetteFrame)
-vigGrad.Transparency = NumberSequence.new({
-    NumberSequenceKeypoint.new(0, 1),
-    NumberSequenceKeypoint.new(0.5, 0.7),
-    NumberSequenceKeypoint.new(1, 0),
-})
-vigGrad.Rotation = 0
 
+local function makeVigEdge(xScale, yScale, xSize, ySize, rotation)
+    local e = Instance.new("Frame", vignetteFrame)
+    e.Size = UDim2.new(xSize, 0, ySize, 0)
+    e.Position = UDim2.new(xScale, 0, yScale, 0)
+    e.BackgroundTransparency = 1
+    e.BorderSizePixel = 0
+    e.ZIndex = 4
+    local g = Instance.new("UIGradient", e)
+    g.Color = ColorSequence.new(Color3.fromRGB(0,0,0), Color3.fromRGB(0,0,0))
+    g.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.2),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    g.Rotation = rotation
+end
+makeVigEdge(0, 0, 1, 0.35, 180)
+makeVigEdge(0, 0.65, 1, 0.35, 0)
+makeVigEdge(0, 0, 0.25, 1, 90)
+makeVigEdge(0.75, 0, 0.25, 1, 270)
+
+-- Film grain (mobile-safe, uses CC brightness flicker)
 local grainFrame = Instance.new("Frame", sg)
 grainFrame.Size = UDim2.new(1, 0, 1, 0)
 grainFrame.BackgroundTransparency = 1
@@ -167,15 +185,27 @@ grainFrame.BorderSizePixel = 0
 grainFrame.ZIndex = 6
 grainFrame.Visible = false
 
-local grainLabel = Instance.new("TextLabel", grainFrame)
-grainLabel.Size = UDim2.new(1, 0, 1, 0)
-grainLabel.BackgroundTransparency = 1
-grainLabel.TextTransparency = 0.85
-grainLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-grainLabel.TextSize = 9
-grainLabel.Font = Enum.Font.Code
-grainLabel.Text = ""
-grainLabel.ZIndex = 6
+task.spawn(function()
+    while true do
+        task.wait(0.05)
+        if filmGrainEnabled then
+            grainCC.Brightness = (math.random() - 0.5) * 0.08
+            grainCC.Enabled = true
+        else
+            grainCC.Enabled = false
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.05)
+        if heartbeatEnabled then
+            local pulse = math.max(0, math.sin(tick() * 3) * 0.5 + 0.5 - 0.3) * 0.15
+            Lighting.Brightness = originalBrightness + pulse
+        end
+    end
+end)
 
 local function setNightVision(on)
     nightVisionEnabled = on
@@ -204,40 +234,6 @@ local function setFog(on)
         Lighting.FogColor = originalFogColor
     end
 end
-
--- Film grain update loop
-local grainChars = "░▒▓█▄▀■□▪▫"
-task.spawn(function()
-    while true do
-        task.wait(0.05)
-        if filmGrainEnabled then
-            local lines = {}
-            for _ = 1, 30 do
-                local row = {}
-                for _ = 1, 60 do
-                    row[#row+1] = math.random() > 0.85 and grainChars:sub(math.random(1,#grainChars),math.random(1,#grainChars)) or " "
-                end
-                lines[#lines+1] = table.concat(row)
-            end
-            grainLabel.Text = table.concat(lines, "\n")
-        end
-    end
-end)
-
--- Heartbeat pulse loop
-task.spawn(function()
-    while true do
-        task.wait(0.05)
-        if heartbeatEnabled then
-            local t = tick()
-            local beat = math.sin(t * 3) * 0.5 + 0.5
-            local pulse = math.max(0, beat - 0.3) * 0.15
-            if not sepiaEnabled and not bwEnabled and not sunsetEnabled and not neonEnabled and not nightVisionEnabled then
-                Lighting.Brightness = originalBrightness + pulse
-            end
-        end
-    end
-end)
 
 local jointIndex = {}
 local jointNames = {}
@@ -381,9 +377,7 @@ local function updateFrameLabel()
 end
 
 local function saveSlotNames()
-    pcall(function()
-        writefile("flashback_names.txt", table.concat(slotNames, "\n"))
-    end)
+    pcall(function() writefile("flashback_names.txt", table.concat(slotNames, "\n")) end)
 end
 
 local function loadSlotNames()
@@ -684,7 +678,7 @@ titleLabel.BackgroundTransparency = 1
 titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleLabel.TextSize = 8
 titleLabel.Font = Enum.Font.GothamBold
-titleLabel.Text = "🎬 A Flashback (v12)      "
+titleLabel.Text = "🎬 A Flashback (v13)      "
 titleLabel.TextXAlignment = Enum.TextXAlignment.Center
 
 local minimized = false
@@ -880,7 +874,6 @@ local speedLbl = Instance.new("TextLabel", page1)
 speedLbl.LayoutOrder = o1; o1+=1; speedLbl.Size = UDim2.new(1,0,0,11); speedLbl.BackgroundTransparency = 1
 speedLbl.TextColor3 = Color3.fromRGB(130,130,130); speedLbl.TextSize = 8; speedLbl.Font = Enum.Font.GothamMedium
 speedLbl.Text = "Speed: 1.0x"
-
 makeRow(page1, o1, "◀ Slower", "Faster ▶",
     function() playbackSpeed=math.clamp(math.round((playbackSpeed-0.1)*10)/10,-2,2); speedLbl.Text="Speed: "..playbackSpeed.."x" end,
     function() playbackSpeed=math.clamp(math.round((playbackSpeed+0.1)*10)/10,-2,2); speedLbl.Text="Speed: "..playbackSpeed.."x" end
@@ -915,7 +908,6 @@ local fcSpeedLbl = Instance.new("TextLabel", page1)
 fcSpeedLbl.LayoutOrder = o1; o1+=1; fcSpeedLbl.Size = UDim2.new(1,0,0,11); fcSpeedLbl.BackgroundTransparency = 1
 fcSpeedLbl.TextColor3 = Color3.fromRGB(130,130,130); fcSpeedLbl.TextSize = 8; fcSpeedLbl.Font = Enum.Font.GothamMedium
 fcSpeedLbl.Text = "Cam Speed: 0.5"
-
 makeRow(page1, o1, "- Slower", "Faster +",
     function() camSpeed=math.clamp(math.round((camSpeed-0.1)*10)/10,0.1,5); fcSpeedLbl.Text="Cam Speed: "..camSpeed end,
     function() camSpeed=math.clamp(math.round((camSpeed+0.1)*10)/10,0.1,5); fcSpeedLbl.Text="Cam Speed: "..camSpeed end
@@ -925,7 +917,6 @@ local fovLbl = Instance.new("TextLabel", page1)
 fovLbl.LayoutOrder = o1; o1+=1; fovLbl.Size = UDim2.new(1,0,0,11); fovLbl.BackgroundTransparency = 1
 fovLbl.TextColor3 = Color3.fromRGB(130,130,130); fovLbl.TextSize = 8; fovLbl.Font = Enum.Font.GothamMedium
 fovLbl.Text = "FOV: "..math.floor(cam.FieldOfView)
-
 makeRow(page1, o1, "FOV -", "FOV +",
     function() cam.FieldOfView=math.clamp(cam.FieldOfView-5,30,120); fovLbl.Text="FOV: "..math.floor(cam.FieldOfView) end,
     function() cam.FieldOfView=math.clamp(cam.FieldOfView+5,30,120); fovLbl.Text="FOV: "..math.floor(cam.FieldOfView) end
@@ -1082,11 +1073,15 @@ makeFXBtn(page3, o3, "🎬 Cine Bars", Color3.fromRGB(30,30,30), function()
 end); o3+=1
 
 makeFXBtn(page3, o3, "🕶 Vignette", Color3.fromRGB(30,30,60), function()
-    vignetteEnabled = not vignetteEnabled; vignetteFrame.Visible = vignetteEnabled; return vignetteEnabled
+    vignetteEnabled = not vignetteEnabled
+    vignetteFrame.Visible = vignetteEnabled
+    return vignetteEnabled
 end); o3+=1
 
 makeFXBtn(page3, o3, "📽 Film Grain", Color3.fromRGB(50,50,50), function()
-    filmGrainEnabled = not filmGrainEnabled; grainFrame.Visible = filmGrainEnabled; return filmGrainEnabled
+    filmGrainEnabled = not filmGrainEnabled
+    if not filmGrainEnabled then grainCC.Enabled = false end
+    return filmGrainEnabled
 end); o3+=1
 
 makeFXBtn(page3, o3, "💓 Heartbeat Pulse", Color3.fromRGB(120,20,40), function()
@@ -1095,7 +1090,7 @@ makeFXBtn(page3, o3, "💓 Heartbeat Pulse", Color3.fromRGB(120,20,40), function
     return heartbeatEnabled
 end); o3+=1
 
--- Nav row
+-- Nav
 local currentPage = 1
 local navRow = Instance.new("Frame", frame)
 navRow.LayoutOrder = 2; navRow.Size = UDim2.new(1,0,0,20); navRow.BackgroundTransparency = 1
@@ -1148,6 +1143,7 @@ closeBtn.MouseButton1Click:Connect(function()
     cam.FieldOfView = originalFOV
     motionBlur:Destroy()
     dofEffect:Destroy()
+    grainCC:Destroy()
     sg:Destroy()
 end)
 
