@@ -1,0 +1,999 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+local PlayerModule = require(game.Players.LocalPlayer.PlayerScripts:WaitForChild("PlayerModule"))
+local Controls = PlayerModule:GetControls()
+
+local lp = Players.LocalPlayer
+local cam = workspace.CurrentCamera
+
+local recording, isPlaying, recordAll = false, false, false
+local replayData, activeClones = {}, {}
+local playbackIndex, playbackSpeed = 1, 1
+local loopPlayback = false
+local FreecamEnabled = false
+local rotX, rotY, camSpeed = 0, 0, 0.5
+local moveVector = Vector3.new(0, 0, 0)
+local lookSens = 0.005
+local moveTouch, lookTouch, touchStartPos
+local nightVisionEnabled = false
+local motionBlurEnabled = false
+local cinematicCamera = false
+local camMode = "Free"
+local orbitAngle = 0
+local orbitDistance = 10
+local orbitHeight = 2
+local smoothCamCF = nil
+local originalFOV = cam.FieldOfView
+
+local recordBtn
+local function updateRecordBtn() end
+
+local nvColorCorrection = Instance.new("ColorCorrectionEffect")
+nvColorCorrection.TintColor = Color3.fromRGB(0, 255, 80)
+nvColorCorrection.Brightness = 0.1
+nvColorCorrection.Contrast = 0.3
+nvColorCorrection.Saturation = -0.6
+nvColorCorrection.Enabled = false
+nvColorCorrection.Parent = Lighting
+
+local nvBloom = Instance.new("BloomEffect")
+nvBloom.Intensity = 0.8
+nvBloom.Size = 24
+nvBloom.Threshold = 0.95
+nvBloom.Enabled = false
+nvBloom.Parent = Lighting
+
+local motionBlur = Instance.new("BlurEffect")
+motionBlur.Size = 0
+motionBlur.Parent = cam
+
+local originalBrightness = Lighting.Brightness
+local originalAmbient = Lighting.Ambient
+local originalOutdoor = Lighting.OutdoorAmbient
+
+local function setNightVision(on)
+    nightVisionEnabled = on
+    nvColorCorrection.Enabled = on
+    nvBloom.Enabled = on
+    if on then
+        Lighting.Brightness = 5
+        Lighting.Ambient = Color3.fromRGB(0, 60, 0)
+        Lighting.OutdoorAmbient = Color3.fromRGB(0, 80, 0)
+    else
+        Lighting.Brightness = originalBrightness
+        Lighting.Ambient = originalAmbient
+        Lighting.OutdoorAmbient = originalOutdoor
+    end
+end
+
+local jointIndex = {}
+local jointNames = {}
+local jointCount = 0
+
+local function getJointId(name)
+    if not jointIndex[name] then
+        jointCount += 1
+        jointIndex[name] = jointCount
+        jointNames[jointCount] = name
+    end
+    return jointIndex[name]
+end
+
+local function cfToNums(cf)
+    local rx = cf.XVector
+    local ry = cf.YVector
+    local rz = cf.ZVector
+    return cf.X, cf.Y, cf.Z,
+        rx.X, ry.X, rz.X,
+        rx.Y, ry.Y, rz.Y,
+        rx.Z, ry.Z, rz.Z
+end
+
+local function numsToCf(a,b,c,d,e,f,g,h,i,j,k,l)
+    return CFrame.new(a,b,c,d,e,f,g,h,i,j,k,l)
+end
+
+local function fmt(n)
+    return tostring(math.floor(n * 1000000 + 0.5))
+end
+
+local function splitStr(s, sep)
+    local t = {}
+    for v in s:gmatch("([^" .. sep .. "]+)") do t[#t+1] = v end
+    return t
+end
+
+local function serializeReplay(data)
+    jointIndex = {}; jointNames = {}; jointCount = 0
+    for _, frame in ipairs(data) do
+        for _, pData in pairs(frame) do
+            for jname in pairs(pData.Joints) do getJointId(jname) end
+        end
+    end
+    local out = {}
+    out[#out+1] = table.concat(jointNames, ",") .. "\n"
+    for _, frame in ipairs(data) do
+        local frameParts = {}
+        for id, pData in pairs(frame) do
+            local a,b,c,d,e,f,g,h,i,j,k,l = cfToNums(pData.Pivot)
+            local parts = {id,fmt(a),fmt(b),fmt(c),fmt(d),fmt(e),fmt(f),fmt(g),fmt(h),fmt(i),fmt(j),fmt(k),fmt(l)}
+            for jname, jt in pairs(pData.Joints) do
+                local ja,jb,jc,jd,je,jf,jg,jh,ji,jj,jk,jl = cfToNums(jt)
+                table.insert(parts, jointIndex[jname]..","..fmt(ja)..","..fmt(jb)..","..fmt(jc)..","..fmt(jd)..","..fmt(je)..","..fmt(jf)..","..fmt(jg)..","..fmt(jh)..","..fmt(ji)..","..fmt(jj)..","..fmt(jk)..","..fmt(jl))
+            end
+            frameParts[#frameParts+1] = table.concat(parts, ";")
+        end
+        out[#out+1] = table.concat(frameParts, "|") .. "\n"
+    end
+    return table.concat(out)
+end
+
+local function deserializeReplay(raw)
+    local lines = splitStr(raw, "\n")
+    if #lines < 2 then error("Invalid data: too few lines") end
+    local localJointNames = splitStr(lines[1], ",")
+    local data = {}
+    local function parse(n)
+        local v = tonumber(n)
+        if not v then error("bad number: " .. tostring(n)) end
+        return v / 1000000
+    end
+    for li = 2, #lines do
+        local frame = {}
+        local playerChunks = splitStr(lines[li], "|")
+        for _, playerChunk in ipairs(playerChunks) do
+            local segs = splitStr(playerChunk, ";")
+            if #segs >= 13 then
+                local id = segs[1]
+                local pivot = numsToCf(parse(segs[2]),parse(segs[3]),parse(segs[4]),parse(segs[5]),parse(segs[6]),parse(segs[7]),parse(segs[8]),parse(segs[9]),parse(segs[10]),parse(segs[11]),parse(segs[12]),parse(segs[13]))
+                local joints = {}
+                for si = 14, #segs do
+                    local jparts = splitStr(segs[si], ",")
+                    if #jparts == 13 then
+                        local jid = tonumber(jparts[1])
+                        local jname = jid and localJointNames[jid]
+                        if jname then
+                            joints[jname] = numsToCf(parse(jparts[2]),parse(jparts[3]),parse(jparts[4]),parse(jparts[5]),parse(jparts[6]),parse(jparts[7]),parse(jparts[8]),parse(jparts[9]),parse(jparts[10]),parse(jparts[11]),parse(jparts[12]),parse(jparts[13]))
+                        end
+                    end
+                end
+                frame[id] = {Pivot = pivot, Joints = joints}
+            end
+        end
+        if next(frame) then data[#data+1] = frame end
+    end
+    return data
+end
+
+local function getGhostPivot()
+    for _, ghost in pairs(activeClones) do
+        if ghost.Model then
+            local hrp = ghost.Model:FindFirstChild("HumanoidRootPart")
+            if hrp then return hrp.CFrame end
+        end
+    end
+    return nil
+end
+
+local function cleanupGhosts()
+    isPlaying = false
+    cam.CameraType = Enum.CameraType.Custom
+    Controls:Enable()
+    cam.CameraSubject = lp.Character and lp.Character:FindFirstChild("Humanoid") or nil
+    lp.CameraMode = Enum.CameraMode.Classic
+    motionBlur.Size = 0
+    for _, ghost in pairs(activeClones) do
+        if ghost.Model then ghost.Model:Destroy() end
+    end
+    for _, v in ipairs(workspace:GetChildren()) do
+        if v.Name == "Flashback_Ghost" then v:Destroy() end
+    end
+    activeClones = {}
+end
+
+local frameCountLabel
+local function updateFrameLabel()
+    if frameCountLabel then
+        local total = #replayData
+        local secs = math.floor(total / 60)
+        local frames = total % 60
+        if isPlaying then
+            frameCountLabel.Text = ("▶ %d / %d  |  %ds %df"):format(math.floor(playbackIndex), total, secs, frames)
+        elseif recording then
+            local rs = math.floor(total / 60)
+            local rf = total % 60
+            frameCountLabel.Text = ("⏺ %d frames  |  %ds %df"):format(total, rs, rf)
+        else
+            frameCountLabel.Text = ("Frames: %d  |  %ds %df"):format(total, secs, frames)
+        end
+    end
+end
+
+local function startRecording()
+    replayData = {}
+    recording = true
+    updateRecordBtn()
+    task.spawn(function()
+        local frameCount = 0
+        while recording do
+            frameCount += 1
+            local frame = {}
+            local targets = recordAll and Players:GetPlayers() or {lp}
+            for _, p in ipairs(targets) do
+                if p.Character then
+                    local joints = {}
+                    for _, v in ipairs(p.Character:GetDescendants()) do
+                        if v:IsA("Motor6D") and v.Part0 and v.Part1 then
+                            joints[v.Name] = v.C0 * v.Transform * v.C1:Inverse()
+                        end
+                    end
+                    frame[tostring(p.UserId)] = {Pivot = p.Character:GetPivot(), Joints = joints}
+                end
+            end
+            replayData[frameCount] = frame
+            updateFrameLabel()
+            task.wait(1/60)
+        end
+    end)
+end
+
+local function stopRecording()
+    recording = false
+    updateRecordBtn()
+    updateFrameLabel()
+end
+
+local function spawnGhosts(firstFrame)
+    for id, _ in pairs(firstFrame) do
+        local userId = tonumber(id)
+        local targetPlayer = Players:GetPlayerByUserId(userId)
+        local sourceChar = (targetPlayer and targetPlayer.Character) or (userId == lp.UserId and lp.Character)
+        if sourceChar then
+            local hum = sourceChar:FindFirstChildOfClass("Humanoid")
+            local animatorRef = hum and hum:FindFirstChildOfClass("Animator")
+            if animatorRef then animatorRef:Destroy() end
+            local animateRef = sourceChar:FindFirstChild("Animate")
+            if animateRef then animateRef.Disabled = true end
+            sourceChar.Archivable = true
+            local clone = sourceChar:Clone()
+            sourceChar.Archivable = false
+            if animateRef then animateRef.Disabled = false end
+            if hum then Instance.new("Animator").Parent = hum end
+            if clone then
+                clone.Name = "Flashback_Ghost"
+                for _, v in ipairs(clone:GetDescendants()) do
+                    if v:IsA("Script") or v:IsA("LocalScript") then v:Destroy() end
+                end
+                local cloneHum = clone:FindFirstChildOfClass("Humanoid")
+                if cloneHum then
+                    local a = cloneHum:FindFirstChildOfClass("Animator")
+                    if a then a:Destroy() end
+                end
+                local ca = clone:FindFirstChild("Animate")
+                if ca then ca:Destroy() end
+                for _, part in ipairs(clone:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                        part.Anchored = (part.Name == "HumanoidRootPart")
+                    end
+                end
+                local cloneJoints = {}
+                for _, v in ipairs(clone:GetDescendants()) do
+                    if v:IsA("Motor6D") then cloneJoints[v.Name] = v end
+                end
+                clone.Parent = workspace
+                activeClones[id] = {Model = clone, Joints = cloneJoints}
+            end
+        end
+    end
+end
+
+local function playReplay()
+    if #replayData == 0 then warn("No replay data.") return end
+    cleanupGhosts()
+    task.wait(0.1)
+    playbackIndex = 1
+    isPlaying = true
+    activeClones = {}
+    local firstFrame = replayData[1]
+    if not firstFrame then isPlaying = false return end
+    spawnGhosts(firstFrame)
+    task.spawn(function()
+        while isPlaying do
+            playbackIndex = math.clamp(playbackIndex + playbackSpeed, 1, #replayData)
+            local frameData = replayData[math.floor(playbackIndex)]
+            if frameData then
+                for id, ghost in pairs(activeClones) do
+                    local pFrame = frameData[id]
+                    if pFrame and ghost.Model then
+                        ghost.Model:PivotTo(pFrame.Pivot)
+                        for jName, transform in pairs(pFrame.Joints) do
+                            local joint = ghost.Joints[jName]
+                            if joint then joint.C0 = transform * joint.C1 end
+                        end
+                    end
+                end
+            end
+            if motionBlurEnabled then
+                motionBlur.Size = math.abs(playbackSpeed - 1) * 8
+            else
+                motionBlur.Size = 0
+            end
+            updateFrameLabel()
+            local atEnd = playbackIndex >= #replayData and playbackSpeed > 0
+            local atStart = playbackIndex <= 1 and playbackSpeed < 0
+            if atEnd or atStart then
+                if loopPlayback then
+                    playbackIndex = playbackSpeed > 0 and 1 or #replayData
+                else
+                    break
+                end
+            end
+            task.wait(1/60)
+        end
+        if not loopPlayback then cleanupGhosts() end
+    end)
+end
+
+local function enableFreecam(enabled)
+    FreecamEnabled = enabled
+    if enabled then
+        Controls:Disable()
+        cam.CameraType = Enum.CameraType.Scriptable
+        smoothCamCF = cam.CFrame
+        local _, yaw, _ = cam.CFrame:ToEulerAnglesYXZ()
+        rotY = yaw
+    else
+        Controls:Enable()
+        cam.CameraType = Enum.CameraType.Custom
+        moveVector = Vector3.new(0, 0, 0)
+        camMode = "Free"
+    end
+end
+
+UserInputService.TouchStarted:Connect(function(touch, processed)
+    if not FreecamEnabled or processed then return end
+    if touch.Position.X < cam.ViewportSize.X / 2 then
+        moveTouch = touch; touchStartPos = touch.Position
+    else
+        lookTouch = touch
+    end
+end)
+
+UserInputService.TouchMoved:Connect(function(touch)
+    if not FreecamEnabled then return end
+    if touch == moveTouch then
+        local delta = touch.Position - touchStartPos
+        moveVector = Vector3.new(delta.X / 50, 0, -delta.Y / 50)
+    elseif touch == lookTouch then
+        local delta = touch.Position - (lookTouch.Position or touch.Position)
+        rotY = rotY - delta.X * lookSens
+        rotX = math.clamp(rotX - delta.Y * lookSens, -1.5, 1.5)
+    end
+end)
+
+UserInputService.TouchEnded:Connect(function(touch)
+    if touch == moveTouch then moveTouch = nil; moveVector = Vector3.new(0,0,0)
+    elseif touch == lookTouch then lookTouch = nil end
+end)
+
+RunService:BindToRenderStep("FlashbackCamera", Enum.RenderPriority.Camera.Value + 1, function(dt)
+    if not FreecamEnabled then return end
+    local ghostPivot = getGhostPivot()
+    local mouseDelta = UserInputService:GetMouseDelta()
+
+    if camMode == "Free" then
+        local f = (UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.S) and 1 or 0)
+        local s = (UserInputService:IsKeyDown(Enum.KeyCode.D) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.A) and 1 or 0)
+        local u = (UserInputService:IsKeyDown(Enum.KeyCode.E) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.Q) and 1 or 0)
+        rotY = rotY - mouseDelta.X * lookSens
+        rotX = math.clamp(rotX - mouseDelta.Y * lookSens, -1.5, 1.5)
+        local rotation = CFrame.Angles(0, rotY, 0) * CFrame.Angles(rotX, 0, 0)
+        local moveDir = rotation.LookVector * (f + moveVector.Z) + rotation.RightVector * (s + moveVector.X) + Vector3.new(0, u, 0)
+        local targetCF = CFrame.new(cam.CFrame.Position + (moveDir.Magnitude > 0 and moveDir.Unit * camSpeed or Vector3.zero)) * rotation
+        if cinematicCamera then
+            smoothCamCF = smoothCamCF or targetCF
+            smoothCamCF = smoothCamCF:Lerp(targetCF, math.clamp(dt * 8, 0, 1))
+            cam.CFrame = smoothCamCF
+        else
+            cam.CFrame = targetCF
+        end
+
+    elseif camMode == "Lock" then
+        if ghostPivot then
+            rotY = rotY - mouseDelta.X * lookSens
+            rotX = math.clamp(rotX - mouseDelta.Y * lookSens, -1.5, 1.5)
+            local f = (UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.S) and 1 or 0)
+            local s = (UserInputService:IsKeyDown(Enum.KeyCode.D) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.A) and 1 or 0)
+            local u = (UserInputService:IsKeyDown(Enum.KeyCode.E) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.Q) and 1 or 0)
+            local rotation = CFrame.Angles(0, rotY, 0) * CFrame.Angles(rotX, 0, 0)
+            local moveDir = rotation.LookVector * (f + moveVector.Z) + rotation.RightVector * (s + moveVector.X) + Vector3.new(0, u, 0)
+            local offset = cam.CFrame.Position - ghostPivot.Position
+            local newPos = ghostPivot.Position + offset + (moveDir.Magnitude > 0 and moveDir.Unit * camSpeed or Vector3.zero)
+            local targetCF = CFrame.new(newPos, ghostPivot.Position)
+            if cinematicCamera then
+                smoothCamCF = smoothCamCF or targetCF
+                smoothCamCF = smoothCamCF:Lerp(targetCF, math.clamp(dt * 6, 0, 1))
+                cam.CFrame = smoothCamCF
+            else
+                cam.CFrame = targetCF
+            end
+        end
+
+    elseif camMode == "Orbit" then
+        if ghostPivot then
+            orbitAngle = orbitAngle + mouseDelta.X * lookSens
+            orbitHeight = orbitHeight - mouseDelta.Y * 0.1
+            orbitDistance = math.clamp(orbitDistance - (UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or UserInputService:IsKeyDown(Enum.KeyCode.S) and -1 or 0) * camSpeed * 0.5, 2, 50)
+            local ox = ghostPivot.Position.X + math.cos(orbitAngle) * orbitDistance
+            local oz = ghostPivot.Position.Z + math.sin(orbitAngle) * orbitDistance
+            local oy = ghostPivot.Position.Y + orbitHeight
+            local targetCF = CFrame.new(Vector3.new(ox, oy, oz), ghostPivot.Position)
+            if cinematicCamera then
+                smoothCamCF = smoothCamCF or targetCF
+                smoothCamCF = smoothCamCF:Lerp(targetCF, math.clamp(dt * 6, 0, 1))
+                cam.CFrame = smoothCamCF
+            else
+                cam.CFrame = targetCF
+            end
+        end
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.R then
+        if not recording then startRecording(); print("Recording...") else stopRecording(); print("Stopped. Frames:", #replayData) end
+    elseif input.KeyCode == Enum.KeyCode.P then playReplay()
+    elseif input.KeyCode == Enum.KeyCode.F then enableFreecam(not FreecamEnabled)
+    elseif input.KeyCode == Enum.KeyCode.X then cleanupGhosts()
+    elseif input.KeyCode == Enum.KeyCode.Left then playbackSpeed = 0; playbackIndex = math.clamp(playbackIndex - 1, 1, #replayData)
+    elseif input.KeyCode == Enum.KeyCode.Right then playbackSpeed = 0; playbackIndex = math.clamp(playbackIndex + 1, 1, #replayData)
+    end
+end)
+
+local sg = Instance.new("ScreenGui", lp.PlayerGui)
+sg.Name = "FlashbackUI"
+sg.ResetOnSpawn = false
+
+local frame = Instance.new("Frame", sg)
+frame.Size = UDim2.new(0, 160, 0, 0)
+frame.AutomaticSize = Enum.AutomaticSize.Y
+frame.Position = UDim2.new(0, 0, 0.5, -180)
+frame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+frame.BorderSizePixel = 0
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
+
+local padding = Instance.new("UIPadding", frame)
+padding.PaddingTop = UDim.new(0, 3)
+padding.PaddingBottom = UDim.new(0, 3)
+padding.PaddingLeft = UDim.new(0, 3)
+padding.PaddingRight = UDim.new(0, 3)
+
+local layout = Instance.new("UIListLayout", frame)
+layout.Padding = UDim.new(0, 2)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local titleBar = Instance.new("Frame", frame)
+titleBar.LayoutOrder = 0
+titleBar.Size = UDim2.new(1, 0, 0, 22)
+titleBar.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+titleBar.BorderSizePixel = 0
+Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 5)
+
+local recDot = Instance.new("Frame", titleBar)
+recDot.Size = UDim2.new(0, 6, 0, 6)
+recDot.Position = UDim2.new(0, 5, 0.5, -3)
+recDot.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+recDot.BorderSizePixel = 0
+Instance.new("UICorner", recDot).CornerRadius = UDim.new(1, 0)
+
+local recLabel = Instance.new("TextLabel", titleBar)
+recLabel.Size = UDim2.new(0, 30, 1, 0)
+recLabel.Position = UDim2.new(0, 14, 0, 0)
+recLabel.BackgroundTransparency = 1
+recLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
+recLabel.TextSize = 8
+recLabel.Font = Enum.Font.GothamMedium
+recLabel.Text = "OFF"
+recLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local titleLabel = Instance.new("TextLabel", titleBar)
+titleLabel.Size = UDim2.new(1, -90, 1, 0)
+titleLabel.Position = UDim2.new(0, 48, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.TextSize = 8
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.Text = "🎬 A Flashback (v10.1)      "
+titleLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+local minimized = false
+local minimizeBtn = Instance.new("TextButton", titleBar)
+minimizeBtn.Size = UDim2.new(0, 18, 0, 14)
+minimizeBtn.Position = UDim2.new(1, -40, 0.5, -7)
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minimizeBtn.TextSize = 10
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.Text = "—"
+minimizeBtn.AutoButtonColor = true
+Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 3)
+
+local closeBtn = Instance.new("TextButton", titleBar)
+closeBtn.Size = UDim2.new(0, 18, 0, 14)
+closeBtn.Position = UDim2.new(1, -20, 0.5, -7)
+closeBtn.BackgroundColor3 = Color3.fromRGB(160, 35, 35)
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.TextSize = 10
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Text = "X"
+closeBtn.AutoButtonColor = true
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 3)
+
+local dragging = false
+local dragStartMouse, dragStartPos
+titleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStartMouse = input.Position
+        dragStartPos = frame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if not dragging then return end
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        local delta = input.Position - dragStartMouse
+        frame.Position = UDim2.new(dragStartPos.X.Scale, dragStartPos.X.Offset + delta.X, dragStartPos.Y.Scale, dragStartPos.Y.Offset + delta.Y)
+    end
+end)
+
+local blinkVisible = true
+local function setRecordingIndicator(on)
+    if on then
+        recDot.BackgroundColor3 = Color3.fromRGB(220, 40, 40)
+        recLabel.TextColor3 = Color3.fromRGB(220, 40, 40)
+        recLabel.Text = "REC"
+    else
+        recDot.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+        recLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
+        recLabel.Text = "OFF"
+        blinkVisible = true
+    end
+end
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if recording then
+            blinkVisible = not blinkVisible
+            recDot.BackgroundColor3 = blinkVisible and Color3.fromRGB(220, 40, 40) or Color3.fromRGB(100, 20, 20)
+        end
+    end
+end)
+
+local page1 = Instance.new("Frame", frame)
+page1.LayoutOrder = 1
+page1.Size = UDim2.new(1, 0, 0, 0)
+page1.AutomaticSize = Enum.AutomaticSize.Y
+page1.BackgroundTransparency = 1
+
+local p1layout = Instance.new("UIListLayout", page1)
+p1layout.Padding = UDim.new(0, 2)
+p1layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+p1layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local page2 = Instance.new("Frame", frame)
+page2.LayoutOrder = 1
+page2.Size = UDim2.new(1, 0, 0, 0)
+page2.AutomaticSize = Enum.AutomaticSize.Y
+page2.BackgroundTransparency = 1
+page2.Visible = false
+
+local p2layout = Instance.new("UIListLayout", page2)
+p2layout.Padding = UDim.new(0, 2)
+p2layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+p2layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local buttonOrder1 = 0
+local buttonOrder2 = 0
+
+local function makeBtn(parent, order, text, color, cb)
+    local btn = Instance.new("TextButton", parent)
+    btn.LayoutOrder = order
+    btn.Size = UDim2.new(1, 0, 0, 20)
+    btn.BackgroundColor3 = color or Color3.fromRGB(40, 40, 40)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextSize = 9
+    btn.Font = Enum.Font.GothamMedium
+    btn.Text = text
+    btn.AutoButtonColor = true
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+    if cb then btn.MouseButton1Click:Connect(cb) end
+    return btn
+end
+
+local function makeLbl(parent, order, text)
+    local l = Instance.new("TextLabel", parent)
+    l.LayoutOrder = order
+    l.Size = UDim2.new(1, 0, 0, 11)
+    l.BackgroundTransparency = 1
+    l.TextColor3 = Color3.fromRGB(100, 100, 100)
+    l.TextSize = 8
+    l.Font = Enum.Font.GothamBold
+    l.Text = text
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    return l
+end
+
+local function makeSep(parent, order)
+    local s = Instance.new("Frame", parent)
+    s.LayoutOrder = order
+    s.Size = UDim2.new(1, 0, 0, 1)
+    s.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    s.BorderSizePixel = 0
+end
+
+local function makeRow(parent, order, labelA, labelB, cbA, cbB)
+    local row = Instance.new("Frame", parent)
+    row.LayoutOrder = order
+    row.Size = UDim2.new(1, 0, 0, 20)
+    row.BackgroundTransparency = 1
+    local rl = Instance.new("UIListLayout", row)
+    rl.FillDirection = Enum.FillDirection.Horizontal
+    rl.Padding = UDim.new(0, 3)
+    rl.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    local function rb(text, cb)
+        local b = Instance.new("TextButton", row)
+        b.Size = UDim2.new(0.48, 0, 1, 0)
+        b.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        b.TextColor3 = Color3.fromRGB(255, 255, 255)
+        b.Font = Enum.Font.GothamMedium
+        b.TextSize = 9
+        b.Text = text
+        b.AutoButtonColor = true
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+        b.MouseButton1Click:Connect(cb)
+        return b
+    end
+    rb(labelA, cbA)
+    rb(labelB, cbB)
+end
+
+makeLbl(page1, buttonOrder1, "  RECORD"); buttonOrder1+=1
+
+recordBtn = makeBtn(page1, buttonOrder1, "🔴 Record", nil, function()
+    if not recording then startRecording() else stopRecording() end
+end); buttonOrder1+=1
+
+updateRecordBtn = function()
+    if recording then
+        recordBtn.Text = "⏹ Stop"
+        recordBtn.BackgroundColor3 = Color3.fromRGB(160, 28, 28)
+        setRecordingIndicator(true)
+    else
+        recordBtn.Text = "🔴 Record"
+        recordBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        setRecordingIndicator(false)
+    end
+end
+
+local recordOthersBtn
+recordOthersBtn = makeBtn(page1, buttonOrder1, "👥 Others: OFF", nil, function()
+    recordAll = not recordAll
+    recordOthersBtn.Text = "👥 Others: " .. (recordAll and "ON" or "OFF")
+    recordOthersBtn.BackgroundColor3 = recordAll and Color3.fromRGB(25, 90, 25) or Color3.fromRGB(40, 40, 40)
+end); buttonOrder1+=1
+
+frameCountLabel = Instance.new("TextLabel", page1)
+frameCountLabel.LayoutOrder = buttonOrder1; buttonOrder1+=1
+frameCountLabel.Size = UDim2.new(1, 0, 0, 11)
+frameCountLabel.BackgroundTransparency = 1
+frameCountLabel.TextColor3 = Color3.fromRGB(130, 130, 130)
+frameCountLabel.TextSize = 8
+frameCountLabel.Font = Enum.Font.GothamMedium
+frameCountLabel.Text = "Frames: 0  |  0s 0f"
+
+makeSep(page1, buttonOrder1); buttonOrder1+=1
+makeLbl(page1, buttonOrder1, "  PLAYBACK"); buttonOrder1+=1
+makeBtn(page1, buttonOrder1, "▶ Play", nil, playReplay); buttonOrder1+=1
+makeRow(page1, buttonOrder1, "⬅ Step", "Step ➡",
+    function() playbackSpeed=0; playbackIndex=math.clamp(playbackIndex-1,1,#replayData) end,
+    function() playbackSpeed=0; playbackIndex=math.clamp(playbackIndex+1,1,#replayData) end
+); buttonOrder1+=1
+makeBtn(page1, buttonOrder1, "🧹 Clear Ghosts", nil, cleanupGhosts); buttonOrder1+=1
+
+local loopBtn
+loopBtn = makeBtn(page1, buttonOrder1, "🔁 Loop: OFF", nil, function()
+    loopPlayback = not loopPlayback
+    loopBtn.Text = "🔁 Loop: " .. (loopPlayback and "ON" or "OFF")
+    loopBtn.BackgroundColor3 = loopPlayback and Color3.fromRGB(25, 80, 120) or Color3.fromRGB(40, 40, 40)
+end); buttonOrder1+=1
+
+-- 67 (if you found this you are dedicated, arent you)
+
+local speedLbl = Instance.new("TextLabel", page1)
+speedLbl.LayoutOrder = buttonOrder1; buttonOrder1+=1
+speedLbl.Size = UDim2.new(1, 0, 0, 11)
+speedLbl.BackgroundTransparency = 1
+speedLbl.TextColor3 = Color3.fromRGB(130, 130, 130)
+speedLbl.TextSize = 8
+speedLbl.Font = Enum.Font.GothamMedium
+speedLbl.Text = "Speed: 1.0x"
+
+makeRow(page1, buttonOrder1, "◀ Slower", "Faster ▶",
+    function()
+        playbackSpeed = math.clamp(math.round((playbackSpeed-0.1)*10)/10,-2,2)
+        speedLbl.Text = "Speed: "..playbackSpeed.."x"
+    end,
+    function()
+        playbackSpeed = math.clamp(math.round((playbackSpeed+0.1)*10)/10,-2,2)
+        speedLbl.Text = "Speed: "..playbackSpeed.."x"
+    end
+); buttonOrder1+=1
+
+makeSep(page1, buttonOrder1); buttonOrder1+=1
+makeLbl(page1, buttonOrder1, "  CAMERA"); buttonOrder1+=1
+
+local freecamBtn
+freecamBtn = makeBtn(page1, buttonOrder1, "🎥 Freecam: OFF", nil, function()
+    enableFreecam(not FreecamEnabled)
+    freecamBtn.Text = "🎥 Freecam: "..(FreecamEnabled and "ON" or "OFF")
+    freecamBtn.BackgroundColor3 = FreecamEnabled and Color3.fromRGB(25,70,140) or Color3.fromRGB(40,40,40)
+end); buttonOrder1+=1
+
+local camModeBtn
+camModeBtn = makeBtn(page1, buttonOrder1, "🎯 Mode: Free", nil, function()
+    if camMode == "Free" then camMode = "Lock"
+    elseif camMode == "Lock" then camMode = "Orbit"
+    else camMode = "Free" end
+    smoothCamCF = cam.CFrame
+    camModeBtn.Text = "🎯 Mode: "..camMode
+    camModeBtn.BackgroundColor3 = camMode == "Free" and Color3.fromRGB(40,40,40) or camMode == "Lock" and Color3.fromRGB(25,90,60) or Color3.fromRGB(90,50,20)
+end); buttonOrder1+=1
+
+local cinematicBtn
+cinematicBtn = makeBtn(page1, buttonOrder1, "🎞 Cinematic: OFF", nil, function()
+    cinematicCamera = not cinematicCamera
+    smoothCamCF = cam.CFrame
+    cinematicBtn.Text = "🎞 Cinematic: "..(cinematicCamera and "ON" or "OFF")
+    cinematicBtn.BackgroundColor3 = cinematicCamera and Color3.fromRGB(80,30,120) or Color3.fromRGB(40,40,40)
+end); buttonOrder1+=1
+
+local fcSpeedLbl = Instance.new("TextLabel", page1)
+fcSpeedLbl.LayoutOrder = buttonOrder1; buttonOrder1+=1
+fcSpeedLbl.Size = UDim2.new(1, 0, 0, 11)
+fcSpeedLbl.BackgroundTransparency = 1
+fcSpeedLbl.TextColor3 = Color3.fromRGB(130, 130, 130)
+fcSpeedLbl.TextSize = 8
+fcSpeedLbl.Font = Enum.Font.GothamMedium
+fcSpeedLbl.Text = "Cam Speed: 0.5"
+
+makeRow(page1, buttonOrder1, "- Slower", "Faster +",
+    function()
+        camSpeed = math.clamp(math.round((camSpeed-0.1)*10)/10,0.1,5)
+        fcSpeedLbl.Text = "Cam Speed: "..camSpeed
+    end,
+    function()
+        camSpeed = math.clamp(math.round((camSpeed+0.1)*10)/10,0.1,5)
+        fcSpeedLbl.Text = "Cam Speed: "..camSpeed
+    end
+); buttonOrder1+=1
+
+local fovLbl = Instance.new("TextLabel", page1)
+fovLbl.LayoutOrder = buttonOrder1; buttonOrder1+=1
+fovLbl.Size = UDim2.new(1, 0, 0, 11)
+fovLbl.BackgroundTransparency = 1
+fovLbl.TextColor3 = Color3.fromRGB(130, 130, 130)
+fovLbl.TextSize = 8
+fovLbl.Font = Enum.Font.GothamMedium
+fovLbl.Text = "FOV: "..math.floor(cam.FieldOfView)
+
+makeRow(page1, buttonOrder1, "FOV -", "FOV +",
+    function()
+        cam.FieldOfView = math.clamp(cam.FieldOfView - 5, 30, 120)
+        fovLbl.Text = "FOV: "..math.floor(cam.FieldOfView)
+    end,
+    function()
+        cam.FieldOfView = math.clamp(cam.FieldOfView + 5, 30, 120)
+        fovLbl.Text = "FOV: "..math.floor(cam.FieldOfView)
+    end
+); buttonOrder1+=1
+
+local nvBtn
+nvBtn = makeBtn(page1, buttonOrder1, "🌙 NV: OFF", nil, function()
+    setNightVision(not nightVisionEnabled)
+    nvBtn.Text = "🌙 NV: "..(nightVisionEnabled and "ON" or "OFF")
+    nvBtn.BackgroundColor3 = nightVisionEnabled and Color3.fromRGB(0,85,35) or Color3.fromRGB(40,40,40)
+end); buttonOrder1+=1
+
+makeLbl(page2, buttonOrder2, "  SAVE / LOAD"); buttonOrder2+=1
+
+task.spawn(function()
+    local ok, result = pcall(function()
+        if isfile and isfile("flashback_replay.txt") then
+            local raw = readfile("flashback_replay.txt")
+            if raw and raw ~= "" then
+                local parsed = deserializeReplay(raw)
+                if parsed and #parsed > 0 then
+                    replayData = parsed
+                    warn(("Auto-loaded slot 1! %d frames ready."):format(#replayData))
+                    updateFrameLabel()
+                end
+            end
+        end
+    end)
+    if not ok then warn("Auto-load failed: "..tostring(result)) end
+end)
+
+for slot = 1, 5 do
+    local filename = "flashback_slot"..slot..".txt"
+    makeLbl(page2, buttonOrder2, "  Slot "..slot); buttonOrder2+=1
+    makeRow(page2, buttonOrder2,
+        "💾 Save "..slot,
+        "📂 Load "..slot,
+        function()
+            if #replayData == 0 then warn("Nothing to save.") return end
+            local ok, result = pcall(serializeReplay, replayData)
+            if not ok then warn("Serialize failed: "..tostring(result)) return end
+            local fok, ferr = pcall(writefile, filename, result)
+            if fok then warn(("Slot %d saved! (%d frames)"):format(slot, #replayData))
+            else warn("writefile failed: "..tostring(ferr)) end
+            pcall(setclipboard, result)
+        end,
+        function()
+            task.spawn(function()
+                local ok, result = pcall(function()
+                    if not isfile or not isfile(filename) then error(filename.." not found.") end
+                    local raw = readfile(filename)
+                    if not raw or raw == "" then error("File is empty.") end
+                    return deserializeReplay(raw)
+                end)
+                if ok and result and #result > 0 then
+                    replayData = result
+                    updateFrameLabel()
+                    warn(("Slot %d loaded! %d frames ready."):format(slot, #replayData))
+                else
+                    warn("Load slot "..slot.." failed: "..tostring(result))
+                end
+            end)
+        end
+    ); buttonOrder2+=1
+end
+
+makeSep(page2, buttonOrder2); buttonOrder2+=1
+makeLbl(page2, buttonOrder2, "  PASTE CODE"); buttonOrder2+=1
+
+local codeBox = Instance.new("TextBox", page2)
+codeBox.LayoutOrder = buttonOrder2; buttonOrder2+=1
+codeBox.Size = UDim2.new(1, 0, 0, 20)
+codeBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+codeBox.TextColor3 = Color3.fromRGB(200, 200, 200)
+codeBox.PlaceholderText = "Paste code here..."
+codeBox.PlaceholderColor3 = Color3.fromRGB(65, 65, 65)
+codeBox.TextSize = 8
+codeBox.Font = Enum.Font.GothamMedium
+codeBox.Text = ""
+codeBox.ClearTextOnFocus = false
+codeBox.BorderSizePixel = 0
+codeBox.TextXAlignment = Enum.TextXAlignment.Left
+Instance.new("UICorner", codeBox).CornerRadius = UDim.new(0, 4)
+local cbp = Instance.new("UIPadding", codeBox); cbp.PaddingLeft = UDim.new(0,4)
+
+makeBtn(page2, buttonOrder2, "📂 Load from Code", nil, function()
+    local raw = codeBox.Text
+    if not raw or raw == "" then warn("No code entered.") return end
+    task.spawn(function()
+        local ok, result = pcall(deserializeReplay, raw)
+        if ok and result and #result > 0 then
+            replayData = result
+            codeBox.Text = ""
+            updateFrameLabel()
+            warn(("Loaded from code! %d frames ready."):format(#replayData))
+        else warn("Load failed: "..tostring(result)) end
+    end)
+end); buttonOrder2+=1
+
+makeSep(page2, buttonOrder2); buttonOrder2+=1
+makeLbl(page2, buttonOrder2, "  FX"); buttonOrder2+=1
+
+local mblurBtn
+mblurBtn = makeBtn(page2, buttonOrder2, "💫 Motion Blur: OFF", nil, function()
+    motionBlurEnabled = not motionBlurEnabled
+    if not motionBlurEnabled then motionBlur.Size = 0 end
+    mblurBtn.Text = "💫 Motion Blur: "..(motionBlurEnabled and "ON" or "OFF")
+    mblurBtn.BackgroundColor3 = motionBlurEnabled and Color3.fromRGB(80,50,120) or Color3.fromRGB(40,40,40)
+end); buttonOrder2+=1
+
+local navRow = Instance.new("Frame", frame)
+navRow.LayoutOrder = 2
+navRow.Size = UDim2.new(1, 0, 0, 20)
+navRow.BackgroundTransparency = 1
+
+local navLayout = Instance.new("UIListLayout", navRow)
+navLayout.FillDirection = Enum.FillDirection.Horizontal
+navLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+navLayout.Padding = UDim.new(0, 3)
+
+local backBtn = Instance.new("TextButton", navRow)
+backBtn.Size = UDim2.new(0.48, 0, 1, 0)
+backBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+backBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+backBtn.TextSize = 8
+backBtn.Font = Enum.Font.GothamMedium
+backBtn.Text = "← Back"
+backBtn.AutoButtonColor = true
+backBtn.Visible = false
+Instance.new("UICorner", backBtn).CornerRadius = UDim.new(0, 4)
+
+local nextBtn = Instance.new("TextButton", navRow)
+nextBtn.Size = UDim2.new(0.48, 0, 1, 0)
+nextBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+nextBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+nextBtn.TextSize = 8
+nextBtn.Font = Enum.Font.GothamMedium
+nextBtn.Text = "Page 2 →"
+nextBtn.AutoButtonColor = true
+Instance.new("UICorner", nextBtn).CornerRadius = UDim.new(0, 4)
+
+makeLbl(page2, buttonOrder2, "  Check console for updates."); buttonOrder2+=1
+
+nextBtn.MouseButton1Click:Connect(function()
+    page1.Visible = false
+    page2.Visible = true
+    backBtn.Visible = true
+    nextBtn.Visible = false
+end)
+
+backBtn.MouseButton1Click:Connect(function()
+    page2.Visible = false
+    page1.Visible = true
+    backBtn.Visible = false
+    nextBtn.Visible = true
+end)
+
+minimizeBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    page1.Visible = not minimized and true or false
+    page2.Visible = false
+    navRow.Visible = not minimized
+    minimizeBtn.Text = minimized and "▲" or "—"
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    cleanupGhosts()
+    setNightVision(false)
+    cam.FieldOfView = originalFOV
+    motionBlur:Destroy()
+    sg:Destroy()
+end)
+
+print("A Flashback ready! R=Record P=Play F=Freecam X=Clear ←/→=Step")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
