@@ -2,6 +2,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
 local PlayerModule = require(game.Players.LocalPlayer.PlayerScripts:WaitForChild("PlayerModule"))
 local Controls = PlayerModule:GetControls()
 
@@ -60,8 +61,19 @@ local spaceEnabled = false
 local acidEnabled = false
 local bloodMoonEnabled = false
 
+local camPathFrames = {}
+local camPathRecording = false
+local camPathPlaying = false
+local camPathIndex = 1
+local camPathSpeed = 1
+
 local recordBtn
 local function updateRecordBtn() end
+
+local bgMusic = Instance.new("Sound")
+bgMusic.Volume = 0.5
+bgMusic.Looped = true
+bgMusic.Parent = workspace
 
 local sg = Instance.new("ScreenGui", lp.PlayerGui)
 sg.Name = "FlashbackUI"
@@ -230,51 +242,29 @@ RunService.Heartbeat:Connect(function()
 end)
 
 local function stopAllWeatherParticles()
-    rainEmitter.Enabled = false
-    rainEmitter.Rate = 0
-    snowEmitter.Enabled = false
-    snowEmitter.Rate = 0
-    sandEmitter.Enabled = false
-    sandEmitter.Rate = 0
+    rainEmitter.Enabled = false; rainEmitter.Rate = 0
+    snowEmitter.Enabled = false; snowEmitter.Rate = 0
+    sandEmitter.Enabled = false; sandEmitter.Rate = 0
 end
 
 local function resetWeatherCC()
     weatherCC.Enabled = false
     weatherCC.TintColor = Color3.fromRGB(255,255,255)
-    weatherCC.Brightness = 0
-    weatherCC.Contrast = 0
-    weatherCC.Saturation = 0
+    weatherCC.Brightness = 0; weatherCC.Contrast = 0; weatherCC.Saturation = 0
     weatherBloom.Enabled = false
     weatherBlur.Size = 0
-    Lighting.FogEnd = originalFogEnd
-    Lighting.FogStart = originalFogStart
-    Lighting.FogColor = originalFogColor
-    Lighting.Brightness = originalBrightness
-    Lighting.Ambient = originalAmbient
-    Lighting.OutdoorAmbient = originalOutdoor
-    Lighting.ClockTime = originalClockTime
+    Lighting.FogEnd = originalFogEnd; Lighting.FogStart = originalFogStart; Lighting.FogColor = originalFogColor
+    Lighting.Brightness = originalBrightness; Lighting.Ambient = originalAmbient
+    Lighting.OutdoorAmbient = originalOutdoor; Lighting.ClockTime = originalClockTime
     weatherPart.CFrame = CFrame.new(weatherPart.Position)
 end
 
 local function disableAllWeatherShaders()
-    rainEnabled = false
-    thunderEnabled = false
-    snowEnabled = false
-    blizzardEnabled = false
-    sandstormEnabled = false
-    dawnEnabled = false
-    duskEnabled = false
-    midnightEnabled = false
-    middayEnabled = false
-    eclipseEnabled = false
-    underwaterEnabled = false
-    arcticEnabled = false
-    retroEnabled = false
-    oldtvEnabled = false
-    candleEnabled = false
-    spaceEnabled = false
-    acidEnabled = false
-    bloodMoonEnabled = false
+    rainEnabled=false; thunderEnabled=false; snowEnabled=false; blizzardEnabled=false
+    sandstormEnabled=false; dawnEnabled=false; duskEnabled=false; midnightEnabled=false
+    middayEnabled=false; eclipseEnabled=false; underwaterEnabled=false; arcticEnabled=false
+    retroEnabled=false; oldtvEnabled=false; candleEnabled=false; spaceEnabled=false
+    acidEnabled=false; bloodMoonEnabled=false
     stopAllWeatherParticles()
     resetWeatherCC()
     thunderFlashCC.Enabled = false
@@ -287,12 +277,9 @@ task.spawn(function()
         task.wait(math.random(4, 10))
         if thunderEnabled then
             thunderFlashCC.Enabled = true
-            thunderFlashCC.Brightness = 1.5
-            task.wait(0.05)
-            thunderFlashCC.Brightness = 0
-            task.wait(0.05)
-            thunderFlashCC.Brightness = 0.8
-            task.wait(0.05)
+            thunderFlashCC.Brightness = 1.5; task.wait(0.05)
+            thunderFlashCC.Brightness = 0; task.wait(0.05)
+            thunderFlashCC.Brightness = 0.8; task.wait(0.05)
             thunderFlashCC.Brightness = 0
             thunderFlashCC.Enabled = false
         end
@@ -307,12 +294,8 @@ task.spawn(function()
             hue = (hue + 0.02) % 1
             acidCC.Enabled = true
             acidCC.TintColor = Color3.fromHSV(hue, 0.6, 1)
-            acidCC.Saturation = 1.5
-            acidCC.Contrast = 0.3
-            acidCC.Brightness = 0.05
-        else
-            acidCC.Enabled = false
-        end
+            acidCC.Saturation = 1.5; acidCC.Contrast = 0.3; acidCC.Brightness = 0.05
+        else acidCC.Enabled = false end
     end
 end)
 
@@ -324,37 +307,27 @@ task.spawn(function()
             local flicker = (math.random() - 0.5) * 0.1
             candleCC.Brightness = -0.2 + flicker
             candleCC.TintColor = Color3.fromRGB(255, 180 + math.floor(flicker * 100), 100)
-            candleCC.Contrast = 0.3
-            candleCC.Saturation = 0.3
-        else
-            candleCC.Enabled = false
-        end
+            candleCC.Contrast = 0.3; candleCC.Saturation = 0.3
+        else candleCC.Enabled = false end
     end
 end)
 
 local tvFrame = Instance.new("Frame", sg)
-tvFrame.Size = UDim2.new(1, 0, 1, 0)
-tvFrame.BackgroundTransparency = 1
-tvFrame.BorderSizePixel = 0
-tvFrame.ZIndex = 8
-tvFrame.Visible = false
+tvFrame.Size = UDim2.new(1,0,1,0); tvFrame.BackgroundTransparency = 1
+tvFrame.BorderSizePixel = 0; tvFrame.ZIndex = 8; tvFrame.Visible = false
 
-local SCAN_LINES = 60
-for i = 0, SCAN_LINES - 1 do
+for i = 0, 59 do
     local line = Instance.new("Frame", tvFrame)
-    line.Size = UDim2.new(1, 0, 1/SCAN_LINES * 0.4, 0)
-    line.Position = UDim2.new(0, 0, i/SCAN_LINES, 0)
-    line.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    line.Size = UDim2.new(1, 0, 1/60 * 0.4, 0)
+    line.Position = UDim2.new(0, 0, i/60, 0)
+    line.BackgroundColor3 = Color3.fromRGB(0,0,0)
     line.BackgroundTransparency = 0.7
-    line.BorderSizePixel = 0
-    line.ZIndex = 8
+    line.BorderSizePixel = 0; line.ZIndex = 8
 end
 
 local tvFlickerCC = Instance.new("ColorCorrectionEffect")
-tvFlickerCC.Saturation = -0.5
-tvFlickerCC.Contrast = 0.3
-tvFlickerCC.Enabled = false
-tvFlickerCC.Parent = Lighting
+tvFlickerCC.Saturation = -0.5; tvFlickerCC.Contrast = 0.3
+tvFlickerCC.Enabled = false; tvFlickerCC.Parent = Lighting
 
 task.spawn(function()
     while true do
@@ -373,47 +346,34 @@ end)
 local barHeight = isMobile and 0.08 or 0.06
 
 local cineBarsTop = Instance.new("Frame", sg)
-cineBarsTop.Size = UDim2.new(1, 0, barHeight, 0)
-cineBarsTop.Position = UDim2.new(0, 0, 0, 0)
-cineBarsTop.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-cineBarsTop.BorderSizePixel = 0
-cineBarsTop.ZIndex = 5
-cineBarsTop.Visible = false
+cineBarsTop.Size = UDim2.new(1,0,barHeight,0); cineBarsTop.Position = UDim2.new(0,0,0,0)
+cineBarsTop.BackgroundColor3 = Color3.fromRGB(0,0,0); cineBarsTop.BorderSizePixel = 0
+cineBarsTop.ZIndex = 5; cineBarsTop.Visible = false
 
 local cineBarsBot = Instance.new("Frame", sg)
-cineBarsBot.Size = UDim2.new(1, 0, barHeight, 0)
-cineBarsBot.Position = UDim2.new(0, 0, 1 - barHeight, 0)
-cineBarsBot.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-cineBarsBot.BorderSizePixel = 0
-cineBarsBot.ZIndex = 5
-cineBarsBot.Visible = false
+cineBarsBot.Size = UDim2.new(1,0,barHeight,0); cineBarsBot.Position = UDim2.new(0,0,1-barHeight,0)
+cineBarsBot.BackgroundColor3 = Color3.fromRGB(0,0,0); cineBarsBot.BorderSizePixel = 0
+cineBarsBot.ZIndex = 5; cineBarsBot.Visible = false
 
 local vignetteCC = Instance.new("ColorCorrectionEffect")
-vignetteCC.Brightness = -0.15
-vignetteCC.Contrast = 0.25
-vignetteCC.Enabled = false
-vignetteCC.Parent = Lighting
+vignetteCC.Brightness = -0.15; vignetteCC.Contrast = 0.25
+vignetteCC.Enabled = false; vignetteCC.Parent = Lighting
 
 local grainFrame = Instance.new("Frame", sg)
-grainFrame.Size = UDim2.new(1, 0, 1, 0)
-grainFrame.BackgroundTransparency = 1
-grainFrame.BorderSizePixel = 0
-grainFrame.ZIndex = 7
-grainFrame.Visible = false
+grainFrame.Size = UDim2.new(1,0,1,0); grainFrame.BackgroundTransparency = 1
+grainFrame.BorderSizePixel = 0; grainFrame.ZIndex = 7; grainFrame.Visible = false
 
-local GRAIN_COLS = 80
-local GRAIN_ROWS = 50
+local GRAIN_COLS, GRAIN_ROWS = 80, 50
 local grainDots = {}
-for row = 0, GRAIN_ROWS - 1 do
-    for col = 0, GRAIN_COLS - 1 do
+for row = 0, GRAIN_ROWS-1 do
+    for col = 0, GRAIN_COLS-1 do
         local dot = Instance.new("Frame", grainFrame)
-        dot.Size = UDim2.new(1/GRAIN_COLS, 0, 1/GRAIN_ROWS, 0)
-        dot.Position = UDim2.new(col/GRAIN_COLS, 0, row/GRAIN_ROWS, 0)
+        dot.Size = UDim2.new(1/GRAIN_COLS,0,1/GRAIN_ROWS,0)
+        dot.Position = UDim2.new(col/GRAIN_COLS,0,row/GRAIN_ROWS,0)
         dot.BorderSizePixel = 0
-        dot.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-        dot.BackgroundTransparency = 1
-        dot.ZIndex = 7
-        grainDots[#grainDots + 1] = dot
+        dot.BackgroundColor3 = Color3.fromRGB(0,0,0)
+        dot.BackgroundTransparency = 1; dot.ZIndex = 7
+        grainDots[#grainDots+1] = dot
     end
 end
 
@@ -424,15 +384,11 @@ task.spawn(function()
             grainFrame.Visible = true
             for _, dot in ipairs(grainDots) do
                 if math.random() > 0.85 then
-                    dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                    dot.BackgroundColor3 = Color3.fromRGB(255,255,255)
                     dot.BackgroundTransparency = 0.3 + math.random() * 0.4
-                else
-                    dot.BackgroundTransparency = 1
-                end
+                else dot.BackgroundTransparency = 1 end
             end
-        else
-            grainFrame.Visible = false
-        end
+        else grainFrame.Visible = false end
     end
 end)
 
@@ -444,30 +400,23 @@ task.spawn(function()
             local t = tick()
             local cycle = (t * 1.2) % 1
             local pulse
-            if cycle < 0.12 then
-                pulse = math.sin(cycle / 0.12 * math.pi)
-            elseif cycle < 0.22 then
-                pulse = math.sin((cycle - 0.12) / 0.10 * math.pi) * 0.6
-            else
-                pulse = 0
-            end
+            if cycle < 0.12 then pulse = math.sin(cycle/0.12*math.pi)
+            elseif cycle < 0.22 then pulse = math.sin((cycle-0.12)/0.10*math.pi)*0.6
+            else pulse = 0 end
             heartbeatCC.Brightness = pulse * 0.35
             heartbeatCC.Contrast = pulse * 0.2
-            heartbeatCC.TintColor = Color3.fromRGB(255, 200 - math.floor(pulse * 60), 200 - math.floor(pulse * 60))
-        else
-            heartbeatCC.Enabled = false
-        end
+            heartbeatCC.TintColor = Color3.fromRGB(255, 200-math.floor(pulse*60), 200-math.floor(pulse*60))
+        else heartbeatCC.Enabled = false end
     end
 end)
 
 local function setNightVision(on)
     nightVisionEnabled = on
-    nvColorCorrection.Enabled = on
-    nvBloom.Enabled = on
+    nvColorCorrection.Enabled = on; nvBloom.Enabled = on
     if on then
         Lighting.Brightness = 5
-        Lighting.Ambient = Color3.fromRGB(0, 60, 0)
-        Lighting.OutdoorAmbient = Color3.fromRGB(0, 80, 0)
+        Lighting.Ambient = Color3.fromRGB(0,60,0)
+        Lighting.OutdoorAmbient = Color3.fromRGB(0,80,0)
     else
         Lighting.Brightness = originalBrightness
         Lighting.Ambient = originalAmbient
@@ -478,23 +427,17 @@ end
 local function setFog(on)
     fogEnabled = on
     if on then
-        Lighting.FogEnd = 120
-        Lighting.FogStart = 20
-        Lighting.FogColor = Color3.fromRGB(180, 180, 190)
+        Lighting.FogEnd = 120; Lighting.FogStart = 20
+        Lighting.FogColor = Color3.fromRGB(180,180,190)
     else
-        Lighting.FogEnd = originalFogEnd
-        Lighting.FogStart = originalFogStart
+        Lighting.FogEnd = originalFogEnd; Lighting.FogStart = originalFogStart
         Lighting.FogColor = originalFogColor
     end
 end
 
 local function applyWeather(cfg)
     disableAllWeatherShaders()
-    if cfg.fog then
-        Lighting.FogEnd = cfg.fog.e
-        Lighting.FogStart = cfg.fog.s
-        Lighting.FogColor = cfg.fog.c
-    end
+    if cfg.fog then Lighting.FogEnd=cfg.fog.e; Lighting.FogStart=cfg.fog.s; Lighting.FogColor=cfg.fog.c end
     if cfg.cc then
         weatherCC.Enabled = true
         weatherCC.TintColor = cfg.cc.tint or Color3.fromRGB(255,255,255)
@@ -516,9 +459,8 @@ local function applyWeather(cfg)
     if cfg.rain then rainEmitter.Rate = cfg.rain; rainEmitter.Enabled = true end
     if cfg.snow then snowEmitter.Rate = cfg.snow; snowEmitter.Enabled = true end
     if cfg.sand then
-        sandEmitter.Rate = cfg.sand
-        sandEmitter.Enabled = true
-        weatherPart.CFrame = weatherPart.CFrame * CFrame.Angles(0, 0, math.rad(10))
+        sandEmitter.Rate = cfg.sand; sandEmitter.Enabled = true
+        weatherPart.CFrame = weatherPart.CFrame * CFrame.Angles(0,0,math.rad(10))
     end
 end
 
@@ -536,8 +478,8 @@ local function getJointId(name)
 end
 
 local function cfToNums(cf)
-    local rx = cf.XVector; local ry = cf.YVector; local rz = cf.ZVector
-    return cf.X, cf.Y, cf.Z, rx.X, ry.X, rz.X, rx.Y, ry.Y, rz.Y, rx.Z, ry.Z, rz.Z
+    local rx=cf.XVector; local ry=cf.YVector; local rz=cf.ZVector
+    return cf.X,cf.Y,cf.Z,rx.X,ry.X,rz.X,rx.Y,ry.Y,rz.Y,rx.Z,ry.Z,rz.Z
 end
 
 local function numsToCf(a,b,c,d,e,f,g,h,i,j,k,l)
@@ -545,62 +487,62 @@ local function numsToCf(a,b,c,d,e,f,g,h,i,j,k,l)
 end
 
 local function fmt(n)
-    return tostring(math.floor(n * 1000000 + 0.5))
+    return tostring(math.floor(n*1000000+0.5))
 end
 
 local function splitStr(s, sep)
     local t = {}
-    for v in s:gmatch("([^" .. sep .. "]+)") do t[#t+1] = v end
+    for v in s:gmatch("([^"..sep.."]+)") do t[#t+1]=v end
     return t
 end
 
 local function serializeReplay(data)
-    jointIndex = {}; jointNames = {}; jointCount = 0
-    for _, frame in ipairs(data) do
-        for _, pData in pairs(frame) do
+    jointIndex={}; jointNames={}; jointCount=0
+    for _,frame in ipairs(data) do
+        for _,pData in pairs(frame) do
             for jname in pairs(pData.Joints) do getJointId(jname) end
         end
     end
     local out = {}
-    out[#out+1] = table.concat(jointNames, ",") .. "\n"
-    for _, frame in ipairs(data) do
+    out[#out+1] = table.concat(jointNames,",").."\n"
+    for _,frame in ipairs(data) do
         local frameParts = {}
-        for id, pData in pairs(frame) do
+        for id,pData in pairs(frame) do
             local a,b,c,d,e,f,g,h,i,j,k,l = cfToNums(pData.Pivot)
             local parts = {id,fmt(a),fmt(b),fmt(c),fmt(d),fmt(e),fmt(f),fmt(g),fmt(h),fmt(i),fmt(j),fmt(k),fmt(l)}
-            for jname, jt in pairs(pData.Joints) do
+            for jname,jt in pairs(pData.Joints) do
                 local ja,jb,jc,jd,je,jf,jg,jh,ji,jj,jk,jl = cfToNums(jt)
-                table.insert(parts, jointIndex[jname]..","..fmt(ja)..","..fmt(jb)..","..fmt(jc)..","..fmt(jd)..","..fmt(je)..","..fmt(jf)..","..fmt(jg)..","..fmt(jh)..","..fmt(ji)..","..fmt(jj)..","..fmt(jk)..","..fmt(jl))
+                table.insert(parts,jointIndex[jname]..","..fmt(ja)..","..fmt(jb)..","..fmt(jc)..","..fmt(jd)..","..fmt(je)..","..fmt(jf)..","..fmt(jg)..","..fmt(jh)..","..fmt(ji)..","..fmt(jj)..","..fmt(jk)..","..fmt(jl))
             end
-            frameParts[#frameParts+1] = table.concat(parts, ";")
+            frameParts[#frameParts+1] = table.concat(parts,";")
         end
-        out[#out+1] = table.concat(frameParts, "|") .. "\n"
+        out[#out+1] = table.concat(frameParts,"|").."\n"
     end
     return table.concat(out)
 end
 
 local function deserializeReplay(raw)
-    local lines = splitStr(raw, "\n")
+    local lines = splitStr(raw,"\n")
     if #lines < 2 then error("Invalid data: too few lines") end
-    local localJointNames = splitStr(lines[1], ",")
+    local localJointNames = splitStr(lines[1],",")
     local data = {}
     local function parse(n)
         local v = tonumber(n)
-        if not v then error("bad number: " .. tostring(n)) end
-        return v / 1000000
+        if not v then error("bad number: "..tostring(n)) end
+        return v/1000000
     end
-    for li = 2, #lines do
+    for li=2,#lines do
         local frame = {}
-        local playerChunks = splitStr(lines[li], "|")
-        for _, playerChunk in ipairs(playerChunks) do
-            local segs = splitStr(playerChunk, ";")
+        local playerChunks = splitStr(lines[li],"|")
+        for _,playerChunk in ipairs(playerChunks) do
+            local segs = splitStr(playerChunk,";")
             if #segs >= 13 then
                 local id = segs[1]
                 local pivot = numsToCf(parse(segs[2]),parse(segs[3]),parse(segs[4]),parse(segs[5]),parse(segs[6]),parse(segs[7]),parse(segs[8]),parse(segs[9]),parse(segs[10]),parse(segs[11]),parse(segs[12]),parse(segs[13]))
                 local joints = {}
-                for si = 14, #segs do
-                    local jparts = splitStr(segs[si], ",")
-                    if #jparts == 13 then
+                for si=14,#segs do
+                    local jparts = splitStr(segs[si],",")
+                    if #jparts==13 then
                         local jid = tonumber(jparts[1])
                         local jname = jid and localJointNames[jid]
                         if jname then
@@ -608,16 +550,16 @@ local function deserializeReplay(raw)
                         end
                     end
                 end
-                frame[id] = {Pivot = pivot, Joints = joints}
+                frame[id] = {Pivot=pivot, Joints=joints}
             end
         end
-        if next(frame) then data[#data+1] = frame end
+        if next(frame) then data[#data+1]=frame end
     end
     return data
 end
 
 local function getGhostPivot()
-    for _, ghost in pairs(activeClones) do
+    for _,ghost in pairs(activeClones) do
         if ghost.Model then
             local hrp = ghost.Model:FindFirstChild("HumanoidRootPart")
             if hrp then return hrp.CFrame end
@@ -633,11 +575,11 @@ local function cleanupGhosts()
     cam.CameraSubject = lp.Character and lp.Character:FindFirstChild("Humanoid") or nil
     lp.CameraMode = Enum.CameraMode.Classic
     motionBlur.Size = 0
-    for _, ghost in pairs(activeClones) do
+    for _,ghost in pairs(activeClones) do
         if ghost.Model then ghost.Model:Destroy() end
     end
-    for _, v in ipairs(workspace:GetChildren()) do
-        if v.Name == "Flashback_Ghost" then v:Destroy() end
+    for _,v in ipairs(workspace:GetChildren()) do
+        if v.Name=="Flashback_Ghost" then v:Destroy() end
     end
     activeClones = {}
 end
@@ -646,51 +588,49 @@ local frameCountLabel
 local function updateFrameLabel()
     if frameCountLabel then
         local total = #replayData
-        local secs = math.floor(total / 60)
-        local frames = total % 60
+        local secs = math.floor(total/60)
+        local frames = total%60
         if isPlaying then
-            frameCountLabel.Text = ("▶ %d / %d  |  %ds %df"):format(math.floor(playbackIndex), total, secs, frames)
+            frameCountLabel.Text = ("▶ %d / %d  |  %ds %df"):format(math.floor(playbackIndex),total,secs,frames)
         elseif recording then
-            frameCountLabel.Text = ("⏺ %d frames  |  %ds %df"):format(total, math.floor(total/60), total%60)
+            frameCountLabel.Text = ("⏺ %d frames  |  %ds %df"):format(total,math.floor(total/60),total%60)
         else
-            frameCountLabel.Text = ("Frames: %d  |  %ds %df"):format(total, secs, frames)
+            frameCountLabel.Text = ("Frames: %d  |  %ds %df"):format(total,secs,frames)
         end
     end
 end
 
 local function saveSlotNames()
-    pcall(function() writefile("flashback_names.txt", table.concat(slotNames, "\n")) end)
+    pcall(function() writefile("flashback_names.txt", table.concat(slotNames,"\n")) end)
 end
 
 local function loadSlotNames()
     pcall(function()
         if isfile and isfile("flashback_names.txt") then
             local raw = readfile("flashback_names.txt")
-            local lines = splitStr(raw, "\n")
-            for i = 1, 5 do slotNames[i] = lines[i] or "" end
+            local lines = splitStr(raw,"\n")
+            for i=1,5 do slotNames[i]=lines[i] or "" end
         end
     end)
 end
 
 local function startRecording()
-    replayData = {}
-    recording = true
-    updateRecordBtn()
+    replayData = {}; recording = true; updateRecordBtn()
     task.spawn(function()
         local frameCount = 0
         while recording do
             frameCount += 1
             local frame = {}
             local targets = recordAll and Players:GetPlayers() or {lp}
-            for _, p in ipairs(targets) do
+            for _,p in ipairs(targets) do
                 if p.Character then
                     local joints = {}
-                    for _, v in ipairs(p.Character:GetDescendants()) do
+                    for _,v in ipairs(p.Character:GetDescendants()) do
                         if v:IsA("Motor6D") and v.Part0 and v.Part1 then
-                            joints[v.Name] = v.C0 * v.Transform * v.C1:Inverse()
+                            joints[v.Name] = v.C0*v.Transform*v.C1:Inverse()
                         end
                     end
-                    frame[tostring(p.UserId)] = {Pivot = p.Character:GetPivot(), Joints = joints}
+                    frame[tostring(p.UserId)] = {Pivot=p.Character:GetPivot(), Joints=joints}
                 end
             end
             replayData[frameCount] = frame
@@ -701,16 +641,14 @@ local function startRecording()
 end
 
 local function stopRecording()
-    recording = false
-    updateRecordBtn()
-    updateFrameLabel()
+    recording = false; updateRecordBtn(); updateFrameLabel()
 end
 
 local function spawnGhosts(firstFrame)
-    for id, _ in pairs(firstFrame) do
+    for id,_ in pairs(firstFrame) do
         local userId = tonumber(id)
         local targetPlayer = Players:GetPlayerByUserId(userId)
-        local sourceChar = (targetPlayer and targetPlayer.Character) or (userId == lp.UserId and lp.Character)
+        local sourceChar = (targetPlayer and targetPlayer.Character) or (userId==lp.UserId and lp.Character)
         if sourceChar then
             local hum = sourceChar:FindFirstChildOfClass("Humanoid")
             local animatorRef = hum and hum:FindFirstChildOfClass("Animator")
@@ -724,10 +662,10 @@ local function spawnGhosts(firstFrame)
             if hum then Instance.new("Animator").Parent = hum end
             if clone then
                 clone.Name = "Flashback_Ghost"
-                for _, v in ipairs(clone:GetDescendants()) do
+                for _,v in ipairs(clone:GetDescendants()) do
                     if v:IsA("Script") or v:IsA("LocalScript") then v:Destroy() end
                 end
-                for _, v in ipairs(clone:GetDescendants()) do
+                for _,v in ipairs(clone:GetDescendants()) do
                     if v:IsA("Animation") then v:Destroy() end
                 end
                 local cloneHum = clone:FindFirstChildOfClass("Humanoid")
@@ -738,59 +676,53 @@ local function spawnGhosts(firstFrame)
                 end
                 local ca = clone:FindFirstChild("Animate")
                 if ca then ca:Destroy() end
-                for _, part in ipairs(clone:GetDescendants()) do
+                for _,part in ipairs(clone:GetDescendants()) do
                     if part:IsA("BasePart") then
                         part.CanCollide = false
-                        part.Anchored = (part.Name == "HumanoidRootPart")
+                        part.Anchored = (part.Name=="HumanoidRootPart")
                     end
                 end
                 local cloneJoints = {}
-                for _, v in ipairs(clone:GetDescendants()) do
-                    if v:IsA("Motor6D") then cloneJoints[v.Name] = v end
+                for _,v in ipairs(clone:GetDescendants()) do
+                    if v:IsA("Motor6D") then cloneJoints[v.Name]=v end
                 end
                 clone.Parent = workspace
-                activeClones[id] = {Model = clone, Joints = cloneJoints}
+                activeClones[id] = {Model=clone, Joints=cloneJoints}
             end
         end
     end
 end
 
 local function playReplay()
-    if #replayData == 0 then warn("No replay data.") return end
-    cleanupGhosts()
-    task.wait(0.1)
-    playbackIndex = 1
-    isPlaying = true
-    activeClones = {}
+    if #replayData==0 then warn("No replay data.") return end
+    cleanupGhosts(); task.wait(0.1)
+    playbackIndex=1; isPlaying=true; activeClones={}
     local firstFrame = replayData[1]
-    if not firstFrame then isPlaying = false return end
+    if not firstFrame then isPlaying=false return end
     spawnGhosts(firstFrame)
     task.spawn(function()
         while isPlaying do
-            playbackIndex = math.clamp(playbackIndex + playbackSpeed, 1, #replayData)
+            playbackIndex = math.clamp(playbackIndex+playbackSpeed,1,#replayData)
             local frameData = replayData[math.floor(playbackIndex)]
             if frameData then
-                for id, ghost in pairs(activeClones) do
+                for id,ghost in pairs(activeClones) do
                     local pFrame = frameData[id]
                     if pFrame and ghost.Model then
                         ghost.Model:PivotTo(pFrame.Pivot)
-                        for jName, transform in pairs(pFrame.Joints) do
+                        for jName,transform in pairs(pFrame.Joints) do
                             local joint = ghost.Joints[jName]
-                            if joint then joint.C0 = transform * joint.C1 end
+                            if joint then joint.C0=transform*joint.C1 end
                         end
                     end
                 end
             end
-            motionBlur.Size = motionBlurEnabled and math.abs(playbackSpeed - 1) * 8 or 0
+            motionBlur.Size = motionBlurEnabled and math.abs(playbackSpeed-1)*8 or 0
             updateFrameLabel()
-            local atEnd = playbackIndex >= #replayData and playbackSpeed > 0
-            local atStart = playbackIndex <= 1 and playbackSpeed < 0
+            local atEnd = playbackIndex>=#replayData and playbackSpeed>0
+            local atStart = playbackIndex<=1 and playbackSpeed<0
             if atEnd or atStart then
-                if loopPlayback then
-                    playbackIndex = playbackSpeed > 0 and 1 or #replayData
-                else
-                    break
-                end
+                if loopPlayback then playbackIndex = playbackSpeed>0 and 1 or #replayData
+                else break end
             end
             task.wait(1/60)
         end
@@ -804,456 +736,430 @@ local function enableFreecam(enabled)
         Controls:Disable()
         cam.CameraType = Enum.CameraType.Scriptable
         smoothCamCF = cam.CFrame
-        local _, yaw, _ = cam.CFrame:ToEulerAnglesYXZ()
+        local _,yaw,_ = cam.CFrame:ToEulerAnglesYXZ()
         rotY = yaw
     else
         Controls:Enable()
         cam.CameraType = Enum.CameraType.Custom
-        moveVector = Vector3.new(0, 0, 0)
+        moveVector = Vector3.new(0,0,0)
         camMode = "Free"
     end
 end
 
 UserInputService.TouchStarted:Connect(function(touch, processed)
     if not FreecamEnabled or processed then return end
-    if touch.Position.X < cam.ViewportSize.X / 2 then
-        moveTouch = touch; touchStartPos = touch.Position
-    else lookTouch = touch end
+    if touch.Position.X < cam.ViewportSize.X/2 then
+        moveTouch=touch; touchStartPos=touch.Position
+    else lookTouch=touch end
 end)
 
 UserInputService.TouchMoved:Connect(function(touch)
     if not FreecamEnabled then return end
-    if touch == moveTouch then
-        local delta = touch.Position - touchStartPos
-        moveVector = Vector3.new(delta.X / 50, 0, -delta.Y / 50)
-    elseif touch == lookTouch then
-        local delta = touch.Position - (lookTouch.Position or touch.Position)
-        rotY = rotY - delta.X * lookSens
-        rotX = math.clamp(rotX - delta.Y * lookSens, -1.5, 1.5)
+    if touch==moveTouch then
+        local delta = touch.Position-touchStartPos
+        moveVector = Vector3.new(delta.X/50,0,-delta.Y/50)
+    elseif touch==lookTouch then
+        local delta = touch.Position-(lookTouch.Position or touch.Position)
+        rotY = rotY-delta.X*lookSens
+        rotX = math.clamp(rotX-delta.Y*lookSens,-1.5,1.5)
     end
 end)
 
 UserInputService.TouchEnded:Connect(function(touch)
-    if touch == moveTouch then moveTouch = nil; moveVector = Vector3.new(0,0,0)
-    elseif touch == lookTouch then lookTouch = nil end
+    if touch==moveTouch then moveTouch=nil; moveVector=Vector3.new(0,0,0)
+    elseif touch==lookTouch then lookTouch=nil end
 end)
 
-RunService:BindToRenderStep("FlashbackCamera", Enum.RenderPriority.Camera.Value + 1, function(dt)
+RunService:BindToRenderStep("FlashbackCamera", Enum.RenderPriority.Camera.Value+1, function(dt)
     if not FreecamEnabled then return end
     local ghostPivot = getGhostPivot()
     local mouseDelta = UserInputService:GetMouseDelta()
-    if camMode == "Free" then
-        local f = (UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.S) and 1 or 0)
-        local s = (UserInputService:IsKeyDown(Enum.KeyCode.D) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.A) and 1 or 0)
-        local u = (UserInputService:IsKeyDown(Enum.KeyCode.E) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.Q) and 1 or 0)
-        rotY = rotY - mouseDelta.X * lookSens
-        rotX = math.clamp(rotX - mouseDelta.Y * lookSens, -1.5, 1.5)
-        local rotation = CFrame.Angles(0, rotY, 0) * CFrame.Angles(rotX, 0, 0)
-        local moveDir = rotation.LookVector * (f + moveVector.Z) + rotation.RightVector * (s + moveVector.X) + Vector3.new(0, u, 0)
-        local targetCF = CFrame.new(cam.CFrame.Position + (moveDir.Magnitude > 0 and moveDir.Unit * camSpeed or Vector3.zero)) * rotation
+    if camMode=="Free" then
+        local f=(UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or 0)-(UserInputService:IsKeyDown(Enum.KeyCode.S) and 1 or 0)
+        local s=(UserInputService:IsKeyDown(Enum.KeyCode.D) and 1 or 0)-(UserInputService:IsKeyDown(Enum.KeyCode.A) and 1 or 0)
+        local u=(UserInputService:IsKeyDown(Enum.KeyCode.E) and 1 or 0)-(UserInputService:IsKeyDown(Enum.KeyCode.Q) and 1 or 0)
+        rotY=rotY-mouseDelta.X*lookSens
+        rotX=math.clamp(rotX-mouseDelta.Y*lookSens,-1.5,1.5)
+        local rotation=CFrame.Angles(0,rotY,0)*CFrame.Angles(rotX,0,0)
+        local moveDir=rotation.LookVector*(f+moveVector.Z)+rotation.RightVector*(s+moveVector.X)+Vector3.new(0,u,0)
+        local targetCF=CFrame.new(cam.CFrame.Position+(moveDir.Magnitude>0 and moveDir.Unit*camSpeed or Vector3.zero))*rotation
         if cinematicCamera then
-            smoothCamCF = smoothCamCF or targetCF
-            smoothCamCF = smoothCamCF:Lerp(targetCF, math.clamp(dt * 8, 0, 1))
-            cam.CFrame = smoothCamCF
-        else cam.CFrame = targetCF end
-    elseif camMode == "Lock" then
+            smoothCamCF=smoothCamCF or targetCF
+            smoothCamCF=smoothCamCF:Lerp(targetCF,math.clamp(dt*8,0,1))
+            cam.CFrame=smoothCamCF
+        else cam.CFrame=targetCF end
+    elseif camMode=="Lock" then
         if ghostPivot then
-            rotY = rotY - mouseDelta.X * lookSens
-            rotX = math.clamp(rotX - mouseDelta.Y * lookSens, -1.5, 1.5)
-            local f = (UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.S) and 1 or 0)
-            local s = (UserInputService:IsKeyDown(Enum.KeyCode.D) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.A) and 1 or 0)
-            local u = (UserInputService:IsKeyDown(Enum.KeyCode.E) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.Q) and 1 or 0)
-            local rotation = CFrame.Angles(0, rotY, 0) * CFrame.Angles(rotX, 0, 0)
-            local moveDir = rotation.LookVector * (f + moveVector.Z) + rotation.RightVector * (s + moveVector.X) + Vector3.new(0, u, 0)
-            local offset = cam.CFrame.Position - ghostPivot.Position
-            local newPos = ghostPivot.Position + offset + (moveDir.Magnitude > 0 and moveDir.Unit * camSpeed or Vector3.zero)
-            local targetCF = CFrame.new(newPos, ghostPivot.Position)
+            rotY=rotY-mouseDelta.X*lookSens
+            rotX=math.clamp(rotX-mouseDelta.Y*lookSens,-1.5,1.5)
+            local f=(UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or 0)-(UserInputService:IsKeyDown(Enum.KeyCode.S) and 1 or 0)
+            local s=(UserInputService:IsKeyDown(Enum.KeyCode.D) and 1 or 0)-(UserInputService:IsKeyDown(Enum.KeyCode.A) and 1 or 0)
+            local u=(UserInputService:IsKeyDown(Enum.KeyCode.E) and 1 or 0)-(UserInputService:IsKeyDown(Enum.KeyCode.Q) and 1 or 0)
+            local rotation=CFrame.Angles(0,rotY,0)*CFrame.Angles(rotX,0,0)
+            local moveDir=rotation.LookVector*(f+moveVector.Z)+rotation.RightVector*(s+moveVector.X)+Vector3.new(0,u,0)
+            local offset=cam.CFrame.Position-ghostPivot.Position
+            local newPos=ghostPivot.Position+offset+(moveDir.Magnitude>0 and moveDir.Unit*camSpeed or Vector3.zero)
+            local targetCF=CFrame.new(newPos,ghostPivot.Position)
             if cinematicCamera then
-                smoothCamCF = smoothCamCF or targetCF
-                smoothCamCF = smoothCamCF:Lerp(targetCF, math.clamp(dt * 6, 0, 1))
-                cam.CFrame = smoothCamCF
-            else cam.CFrame = targetCF end
+                smoothCamCF=smoothCamCF or targetCF
+                smoothCamCF=smoothCamCF:Lerp(targetCF,math.clamp(dt*6,0,1))
+                cam.CFrame=smoothCamCF
+            else cam.CFrame=targetCF end
         end
-    elseif camMode == "Orbit" then
+    elseif camMode=="Orbit" then
         if ghostPivot then
-            orbitAngle = orbitAngle + mouseDelta.X * lookSens
-            orbitHeight = orbitHeight - mouseDelta.Y * 0.1
-            orbitDistance = math.clamp(orbitDistance - (UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or UserInputService:IsKeyDown(Enum.KeyCode.S) and -1 or 0) * camSpeed * 0.5, 2, 50)
-            local ox = ghostPivot.Position.X + math.cos(orbitAngle) * orbitDistance
-            local oz = ghostPivot.Position.Z + math.sin(orbitAngle) * orbitDistance
-            local oy = ghostPivot.Position.Y + orbitHeight
-            local targetCF = CFrame.new(Vector3.new(ox, oy, oz), ghostPivot.Position)
+            orbitAngle=orbitAngle+mouseDelta.X*lookSens
+            orbitHeight=orbitHeight-mouseDelta.Y*0.1
+            orbitDistance=math.clamp(orbitDistance-(UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or UserInputService:IsKeyDown(Enum.KeyCode.S) and -1 or 0)*camSpeed*0.5,2,50)
+            local ox=ghostPivot.Position.X+math.cos(orbitAngle)*orbitDistance
+            local oz=ghostPivot.Position.Z+math.sin(orbitAngle)*orbitDistance
+            local oy=ghostPivot.Position.Y+orbitHeight
+            local targetCF=CFrame.new(Vector3.new(ox,oy,oz),ghostPivot.Position)
             if cinematicCamera then
-                smoothCamCF = smoothCamCF or targetCF
-                smoothCamCF = smoothCamCF:Lerp(targetCF, math.clamp(dt * 6, 0, 1))
-                cam.CFrame = smoothCamCF
-            else cam.CFrame = targetCF end
+                smoothCamCF=smoothCamCF or targetCF
+                smoothCamCF=smoothCamCF:Lerp(targetCF,math.clamp(dt*6,0,1))
+                cam.CFrame=smoothCamCF
+            else cam.CFrame=targetCF end
         end
-    end
-end)
-
-UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
-    if input.KeyCode == Enum.KeyCode.R then
-        if not recording then startRecording() else stopRecording() end
-    elseif input.KeyCode == Enum.KeyCode.P then playReplay()
-    elseif input.KeyCode == Enum.KeyCode.F then enableFreecam(not FreecamEnabled)
-    elseif input.KeyCode == Enum.KeyCode.X then cleanupGhosts()
-    elseif input.KeyCode == Enum.KeyCode.Left then playbackSpeed = 0; playbackIndex = math.clamp(playbackIndex-1,1,#replayData)
-    elseif input.KeyCode == Enum.KeyCode.Right then playbackSpeed = 0; playbackIndex = math.clamp(playbackIndex+1,1,#replayData)
     end
 end)
 
 -- UI --
 local frame = Instance.new("Frame", sg)
-frame.Size = UDim2.new(0, 160, 0, 0)
-frame.AutomaticSize = Enum.AutomaticSize.Y
-frame.Position = UDim2.new(0, 0, 0.5, -180)
-frame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
-frame.BorderSizePixel = 0
-Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
+frame.Size = UDim2.new(0,160,0,0); frame.AutomaticSize = Enum.AutomaticSize.Y
+frame.Position = UDim2.new(0,0,0.5,-180)
+frame.BackgroundColor3 = Color3.fromRGB(18,18,18); frame.BorderSizePixel = 0
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0,6)
 
 local padding = Instance.new("UIPadding", frame)
-padding.PaddingTop = UDim.new(0, 3)
-padding.PaddingBottom = UDim.new(0, 3)
-padding.PaddingLeft = UDim.new(0, 3)
-padding.PaddingRight = UDim.new(0, 3)
+padding.PaddingTop=UDim.new(0,3); padding.PaddingBottom=UDim.new(0,3)
+padding.PaddingLeft=UDim.new(0,3); padding.PaddingRight=UDim.new(0,3)
 
 local layout = Instance.new("UIListLayout", frame)
-layout.Padding = UDim.new(0, 2)
-layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Padding=UDim.new(0,2); layout.HorizontalAlignment=Enum.HorizontalAlignment.Center
+layout.SortOrder=Enum.SortOrder.LayoutOrder
 
 local titleBar = Instance.new("Frame", frame)
-titleBar.LayoutOrder = 0
-titleBar.Size = UDim2.new(1, 0, 0, 22)
-titleBar.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
-titleBar.BorderSizePixel = 0
-Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 5)
+titleBar.LayoutOrder=0; titleBar.Size=UDim2.new(1,0,0,22)
+titleBar.BackgroundColor3=Color3.fromRGB(28,28,28); titleBar.BorderSizePixel=0
+Instance.new("UICorner", titleBar).CornerRadius=UDim.new(0,5)
 
 local recDot = Instance.new("Frame", titleBar)
-recDot.Size = UDim2.new(0, 6, 0, 6)
-recDot.Position = UDim2.new(0, 5, 0.5, -3)
-recDot.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-recDot.BorderSizePixel = 0
-Instance.new("UICorner", recDot).CornerRadius = UDim.new(1, 0)
+recDot.Size=UDim2.new(0,6,0,6); recDot.Position=UDim2.new(0,5,0.5,-3)
+recDot.BackgroundColor3=Color3.fromRGB(80,80,80); recDot.BorderSizePixel=0
+Instance.new("UICorner", recDot).CornerRadius=UDim.new(1,0)
 
 local recLabel = Instance.new("TextLabel", titleBar)
-recLabel.Size = UDim2.new(0, 30, 1, 0)
-recLabel.Position = UDim2.new(0, 14, 0, 0)
-recLabel.BackgroundTransparency = 1
-recLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
-recLabel.TextSize = 8
-recLabel.Font = Enum.Font.GothamMedium
-recLabel.Text = "OFF"
-recLabel.TextXAlignment = Enum.TextXAlignment.Left
+recLabel.Size=UDim2.new(0,30,1,0); recLabel.Position=UDim2.new(0,14,0,0)
+recLabel.BackgroundTransparency=1; recLabel.TextColor3=Color3.fromRGB(100,100,100)
+recLabel.TextSize=8; recLabel.Font=Enum.Font.GothamMedium
+recLabel.Text="OFF"; recLabel.TextXAlignment=Enum.TextXAlignment.Left
 
 local titleLabel = Instance.new("TextLabel", titleBar)
-titleLabel.Size = UDim2.new(1, -90, 1, 0)
-titleLabel.Position = UDim2.new(0, 48, 0, 0)
-titleLabel.BackgroundTransparency = 1
-titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-titleLabel.TextSize = 8
-titleLabel.Font = Enum.Font.GothamBold
-titleLabel.Text = "🎬 A Flashback (v17)      "
-titleLabel.TextXAlignment = Enum.TextXAlignment.Center
+titleLabel.Size=UDim2.new(1,-90,1,0); titleLabel.Position=UDim2.new(0,48,0,0)
+titleLabel.BackgroundTransparency=1; titleLabel.TextColor3=Color3.fromRGB(255,255,255)
+titleLabel.TextSize=8; titleLabel.Font=Enum.Font.GothamBold
+titleLabel.Text="🎬 A Flashback (v6.3)     "; titleLabel.TextXAlignment=Enum.TextXAlignment.Center
 
 local minimized = false
 local minimizeBtn = Instance.new("TextButton", titleBar)
-minimizeBtn.Size = UDim2.new(0, 18, 0, 14)
-minimizeBtn.Position = UDim2.new(1, -40, 0.5, -7)
-minimizeBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
-minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-minimizeBtn.TextSize = 10
-minimizeBtn.Font = Enum.Font.GothamBold
-minimizeBtn.Text = "—"
-minimizeBtn.AutoButtonColor = true
-Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 3)
+minimizeBtn.Size=UDim2.new(0,18,0,14); minimizeBtn.Position=UDim2.new(1,-40,0.5,-7)
+minimizeBtn.BackgroundColor3=Color3.fromRGB(55,55,55); minimizeBtn.TextColor3=Color3.fromRGB(255,255,255)
+minimizeBtn.TextSize=10; minimizeBtn.Font=Enum.Font.GothamBold; minimizeBtn.Text="—"
+minimizeBtn.AutoButtonColor=true
+Instance.new("UICorner", minimizeBtn).CornerRadius=UDim.new(0,3)
 
 local closeBtn = Instance.new("TextButton", titleBar)
-closeBtn.Size = UDim2.new(0, 18, 0, 14)
-closeBtn.Position = UDim2.new(1, -20, 0.5, -7)
-closeBtn.BackgroundColor3 = Color3.fromRGB(160, 35, 35)
-closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeBtn.TextSize = 10
-closeBtn.Font = Enum.Font.GothamBold
-closeBtn.Text = "X"
-closeBtn.AutoButtonColor = true
-Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 3)
+closeBtn.Size=UDim2.new(0,18,0,14); closeBtn.Position=UDim2.new(1,-20,0.5,-7)
+closeBtn.BackgroundColor3=Color3.fromRGB(160,35,35); closeBtn.TextColor3=Color3.fromRGB(255,255,255)
+closeBtn.TextSize=10; closeBtn.Font=Enum.Font.GothamBold; closeBtn.Text="X"
+closeBtn.AutoButtonColor=true
+Instance.new("UICorner", closeBtn).CornerRadius=UDim.new(0,3)
 
-local dragging = false
-local dragStartMouse, dragStartPos
+local dragging=false; local dragStartMouse, dragStartPos
 titleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStartMouse = input.Position
-        dragStartPos = frame.Position
+    if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+        dragging=true; dragStartMouse=input.Position; dragStartPos=frame.Position
         input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            if input.UserInputState==Enum.UserInputState.End then dragging=false end
         end)
     end
 end)
 UserInputService.InputChanged:Connect(function(input)
     if not dragging then return end
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        local delta = input.Position - dragStartMouse
-        frame.Position = UDim2.new(dragStartPos.X.Scale, dragStartPos.X.Offset + delta.X, dragStartPos.Y.Scale, dragStartPos.Y.Offset + delta.Y)
+    if input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch then
+        local delta=input.Position-dragStartMouse
+        frame.Position=UDim2.new(dragStartPos.X.Scale,dragStartPos.X.Offset+delta.X,dragStartPos.Y.Scale,dragStartPos.Y.Offset+delta.Y)
     end
 end)
 
-local blinkVisible = true
+local blinkVisible=true
 local function setRecordingIndicator(on)
     if on then
-        recDot.BackgroundColor3 = Color3.fromRGB(220, 40, 40)
-        recLabel.TextColor3 = Color3.fromRGB(220, 40, 40)
-        recLabel.Text = "REC"
+        recDot.BackgroundColor3=Color3.fromRGB(220,40,40)
+        recLabel.TextColor3=Color3.fromRGB(220,40,40); recLabel.Text="REC"
     else
-        recDot.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-        recLabel.TextColor3 = Color3.fromRGB(100, 100, 100)
-        recLabel.Text = "OFF"
-        blinkVisible = true
+        recDot.BackgroundColor3=Color3.fromRGB(80,80,80)
+        recLabel.TextColor3=Color3.fromRGB(100,100,100); recLabel.Text="OFF"
+        blinkVisible=true
     end
 end
 task.spawn(function()
     while true do
         task.wait(0.5)
         if recording then
-            blinkVisible = not blinkVisible
-            recDot.BackgroundColor3 = blinkVisible and Color3.fromRGB(220, 40, 40) or Color3.fromRGB(100, 20, 20)
+            blinkVisible=not blinkVisible
+            recDot.BackgroundColor3=blinkVisible and Color3.fromRGB(220,40,40) or Color3.fromRGB(100,20,20)
         end
     end
 end)
 
-local page1 = Instance.new("Frame", frame)
-page1.LayoutOrder = 1; page1.Size = UDim2.new(1,0,0,0); page1.AutomaticSize = Enum.AutomaticSize.Y; page1.BackgroundTransparency = 1
-local p1l = Instance.new("UIListLayout", page1); p1l.Padding = UDim.new(0,2); p1l.HorizontalAlignment = Enum.HorizontalAlignment.Center; p1l.SortOrder = Enum.SortOrder.LayoutOrder
+local function makePage(frame)
+    local p=Instance.new("Frame",frame)
+    p.LayoutOrder=1; p.Size=UDim2.new(1,0,0,0); p.AutomaticSize=Enum.AutomaticSize.Y
+    p.BackgroundTransparency=1; p.Visible=false
+    local l=Instance.new("UIListLayout",p); l.Padding=UDim.new(0,2)
+    l.HorizontalAlignment=Enum.HorizontalAlignment.Center; l.SortOrder=Enum.SortOrder.LayoutOrder
+    return p
+end
 
-local page2 = Instance.new("Frame", frame)
-page2.LayoutOrder = 1; page2.Size = UDim2.new(1,0,0,0); page2.AutomaticSize = Enum.AutomaticSize.Y; page2.BackgroundTransparency = 1; page2.Visible = false
-local p2l = Instance.new("UIListLayout", page2); p2l.Padding = UDim.new(0,2); p2l.HorizontalAlignment = Enum.HorizontalAlignment.Center; p2l.SortOrder = Enum.SortOrder.LayoutOrder
+local page1=makePage(frame); page1.Visible=true
+local page2=makePage(frame)
+local page3=makePage(frame)
+local page4=makePage(frame)
+local page5=makePage(frame)
+local page6=makePage(frame)
 
-local page3 = Instance.new("Frame", frame)
-page3.LayoutOrder = 1; page3.Size = UDim2.new(1,0,0,0); page3.AutomaticSize = Enum.AutomaticSize.Y; page3.BackgroundTransparency = 1; page3.Visible = false
-local p3l = Instance.new("UIListLayout", page3); p3l.Padding = UDim.new(0,2); p3l.HorizontalAlignment = Enum.HorizontalAlignment.Center; p3l.SortOrder = Enum.SortOrder.LayoutOrder
+local o1,o2,o3,o4,o5,o6=0,0,0,0,0,0
 
-local page4 = Instance.new("Frame", frame)
-page4.LayoutOrder = 1; page4.Size = UDim2.new(1,0,0,0); page4.AutomaticSize = Enum.AutomaticSize.Y; page4.BackgroundTransparency = 1; page4.Visible = false
-local p4l = Instance.new("UIListLayout", page4); p4l.Padding = UDim.new(0,2); p4l.HorizontalAlignment = Enum.HorizontalAlignment.Center; p4l.SortOrder = Enum.SortOrder.LayoutOrder
-
-local o1,o2,o3,o4 = 0,0,0,0
-
-local function makeBtn(parent, order, text, color, cb)
-    local btn = Instance.new("TextButton", parent)
-    btn.LayoutOrder = order; btn.Size = UDim2.new(1,0,0,20)
-    btn.BackgroundColor3 = color or Color3.fromRGB(40,40,40)
-    btn.TextColor3 = Color3.fromRGB(255,255,255); btn.TextSize = 9
-    btn.Font = Enum.Font.GothamMedium; btn.Text = text; btn.AutoButtonColor = true
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,4)
+local function makeBtn(parent,order,text,color,cb)
+    local btn=Instance.new("TextButton",parent)
+    btn.LayoutOrder=order; btn.Size=UDim2.new(1,0,0,20)
+    btn.BackgroundColor3=color or Color3.fromRGB(40,40,40)
+    btn.TextColor3=Color3.fromRGB(255,255,255); btn.TextSize=9
+    btn.Font=Enum.Font.GothamMedium; btn.Text=text; btn.AutoButtonColor=true
+    Instance.new("UICorner",btn).CornerRadius=UDim.new(0,4)
     if cb then btn.MouseButton1Click:Connect(cb) end
     return btn
 end
 
-local function makeLbl(parent, order, text)
-    local l = Instance.new("TextLabel", parent)
-    l.LayoutOrder = order; l.Size = UDim2.new(1,0,0,11); l.BackgroundTransparency = 1
-    l.TextColor3 = Color3.fromRGB(100,100,100); l.TextSize = 8; l.Font = Enum.Font.GothamBold
-    l.Text = text; l.TextXAlignment = Enum.TextXAlignment.Left
+local function makeLbl(parent,order,text)
+    local l=Instance.new("TextLabel",parent)
+    l.LayoutOrder=order; l.Size=UDim2.new(1,0,0,11); l.BackgroundTransparency=1
+    l.TextColor3=Color3.fromRGB(100,100,100); l.TextSize=8; l.Font=Enum.Font.GothamBold
+    l.Text=text; l.TextXAlignment=Enum.TextXAlignment.Left
     return l
 end
 
-local function makeSep(parent, order)
-    local s = Instance.new("Frame", parent)
-    s.LayoutOrder = order; s.Size = UDim2.new(1,0,0,1)
-    s.BackgroundColor3 = Color3.fromRGB(45,45,45); s.BorderSizePixel = 0
+local function makeSep(parent,order)
+    local s=Instance.new("Frame",parent)
+    s.LayoutOrder=order; s.Size=UDim2.new(1,0,0,1)
+    s.BackgroundColor3=Color3.fromRGB(45,45,45); s.BorderSizePixel=0
 end
 
-local function makeRow(parent, order, lA, lB, cA, cB)
-    local row = Instance.new("Frame", parent)
-    row.LayoutOrder = order; row.Size = UDim2.new(1,0,0,20); row.BackgroundTransparency = 1
-    local rl = Instance.new("UIListLayout", row)
-    rl.FillDirection = Enum.FillDirection.Horizontal; rl.Padding = UDim.new(0,3); rl.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    local function rb(text, cb)
-        local b = Instance.new("TextButton", row)
-        b.Size = UDim2.new(0.48,0,1,0); b.BackgroundColor3 = Color3.fromRGB(40,40,40)
-        b.TextColor3 = Color3.fromRGB(255,255,255); b.Font = Enum.Font.GothamMedium
-        b.TextSize = 9; b.Text = text; b.AutoButtonColor = true
-        Instance.new("UICorner", b).CornerRadius = UDim.new(0,4)
+local function makeRow(parent,order,lA,lB,cA,cB)
+    local row=Instance.new("Frame",parent)
+    row.LayoutOrder=order; row.Size=UDim2.new(1,0,0,20); row.BackgroundTransparency=1
+    local rl=Instance.new("UIListLayout",row)
+    rl.FillDirection=Enum.FillDirection.Horizontal; rl.Padding=UDim.new(0,3)
+    rl.HorizontalAlignment=Enum.HorizontalAlignment.Center
+    local function rb(text,cb)
+        local b=Instance.new("TextButton",row)
+        b.Size=UDim2.new(0.48,0,1,0); b.BackgroundColor3=Color3.fromRGB(40,40,40)
+        b.TextColor3=Color3.fromRGB(255,255,255); b.Font=Enum.Font.GothamMedium
+        b.TextSize=9; b.Text=text; b.AutoButtonColor=true
+        Instance.new("UICorner",b).CornerRadius=UDim.new(0,4)
         b.MouseButton1Click:Connect(cb)
         return b
     end
-    rb(lA, cA); rb(lB, cB)
+    rb(lA,cA); rb(lB,cB)
 end
 
-local function makeTextBox(parent, order, placeholder)
-    local box = Instance.new("TextBox", parent)
-    box.LayoutOrder = order; box.Size = UDim2.new(1,0,0,18)
-    box.BackgroundColor3 = Color3.fromRGB(30,30,30); box.TextColor3 = Color3.fromRGB(200,200,200)
-    box.PlaceholderText = placeholder; box.PlaceholderColor3 = Color3.fromRGB(65,65,65)
-    box.TextSize = 8; box.Font = Enum.Font.GothamMedium; box.Text = ""
-    box.ClearTextOnFocus = false; box.BorderSizePixel = 0; box.TextXAlignment = Enum.TextXAlignment.Left
-    Instance.new("UICorner", box).CornerRadius = UDim.new(0,4)
-    local p = Instance.new("UIPadding", box); p.PaddingLeft = UDim.new(0,4)
+local function makeTextBox(parent,order,placeholder)
+    local box=Instance.new("TextBox",parent)
+    box.LayoutOrder=order; box.Size=UDim2.new(1,0,0,18)
+    box.BackgroundColor3=Color3.fromRGB(30,30,30); box.TextColor3=Color3.fromRGB(200,200,200)
+    box.PlaceholderText=placeholder; box.PlaceholderColor3=Color3.fromRGB(65,65,65)
+    box.TextSize=8; box.Font=Enum.Font.GothamMedium; box.Text=""
+    box.ClearTextOnFocus=false; box.BorderSizePixel=0; box.TextXAlignment=Enum.TextXAlignment.Left
+    Instance.new("UICorner",box).CornerRadius=UDim.new(0,4)
+    local p=Instance.new("UIPadding",box); p.PaddingLeft=UDim.new(0,4)
     return box
 end
 
-local function makeFXBtn(parent, order, label, onColor, onToggle)
+local function makeFXBtn(parent,order,label,onColor,onToggle)
     local btn
-    btn = makeBtn(parent, order, label..": OFF", nil, function()
-        local state = onToggle()
-        btn.Text = label..": "..(state and "ON" or "OFF")
-        btn.BackgroundColor3 = state and onColor or Color3.fromRGB(40,40,40)
+    btn=makeBtn(parent,order,label..": OFF",nil,function()
+        local state=onToggle()
+        btn.Text=label..": "..(state and "ON" or "OFF")
+        btn.BackgroundColor3=state and onColor or Color3.fromRGB(40,40,40)
     end)
     return btn
 end
 
-local activeWeatherBtn = nil
-local function makeWeatherBtn(parent, order, label, onColor, onApply)
+local activeWeatherBtn=nil
+local function makeWeatherBtn(parent,order,label,onColor,onApply)
     local btn
-    btn = makeBtn(parent, order, label, nil, function()
-        if activeWeatherBtn == btn then
-            activeWeatherBtn = nil
-            btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    btn=makeBtn(parent,order,label,nil,function()
+        if activeWeatherBtn==btn then
+            activeWeatherBtn=nil
+            btn.BackgroundColor3=Color3.fromRGB(40,40,40)
             disableAllWeatherShaders()
         else
-            if activeWeatherBtn then
-                activeWeatherBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
-            end
-            activeWeatherBtn = btn
-            btn.BackgroundColor3 = onColor
+            if activeWeatherBtn then activeWeatherBtn.BackgroundColor3=Color3.fromRGB(40,40,40) end
+            activeWeatherBtn=btn
+            btn.BackgroundColor3=onColor
             onApply()
         end
     end)
     return btn
 end
 
+local function makeHotkeyRow(parent,order,key,action)
+    local row=Instance.new("Frame",parent)
+    row.LayoutOrder=order; row.Size=UDim2.new(1,0,0,16); row.BackgroundTransparency=1
+    local keyLbl=Instance.new("TextLabel",row)
+    keyLbl.Size=UDim2.new(0,36,1,0); keyLbl.Position=UDim2.new(0,0,0,0)
+    keyLbl.BackgroundColor3=Color3.fromRGB(50,50,50)
+    keyLbl.TextColor3=Color3.fromRGB(255,220,80); keyLbl.TextSize=8
+    keyLbl.Font=Enum.Font.GothamBold; keyLbl.Text=key
+    keyLbl.TextXAlignment=Enum.TextXAlignment.Center
+    Instance.new("UICorner",keyLbl).CornerRadius=UDim.new(0,3)
+    local actLbl=Instance.new("TextLabel",row)
+    actLbl.Size=UDim2.new(1,-40,1,0); actLbl.Position=UDim2.new(0,40,0,0)
+    actLbl.BackgroundTransparency=1; actLbl.TextColor3=Color3.fromRGB(180,180,180)
+    actLbl.TextSize=8; actLbl.Font=Enum.Font.GothamMedium
+    actLbl.Text=action; actLbl.TextXAlignment=Enum.TextXAlignment.Left
+end
+
 -- PAGE 1 --
-makeLbl(page1, o1, "  RECORD"); o1+=1
-recordBtn = makeBtn(page1, o1, "🔴 Record", nil, function()
+makeLbl(page1,o1,"  RECORD"); o1+=1
+recordBtn=makeBtn(page1,o1,"🔴 Record",nil,function()
     if not recording then startRecording() else stopRecording() end
 end); o1+=1
 
-updateRecordBtn = function()
+updateRecordBtn=function()
     if recording then
-        recordBtn.Text = "⏹ Stop"; recordBtn.BackgroundColor3 = Color3.fromRGB(160,28,28)
+        recordBtn.Text="⏹ Stop"; recordBtn.BackgroundColor3=Color3.fromRGB(160,28,28)
         setRecordingIndicator(true)
     else
-        recordBtn.Text = "🔴 Record"; recordBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+        recordBtn.Text="🔴 Record"; recordBtn.BackgroundColor3=Color3.fromRGB(40,40,40)
         setRecordingIndicator(false)
     end
 end
 
 local recordOthersBtn
-recordOthersBtn = makeBtn(page1, o1, "👥 Others: OFF", nil, function()
-    recordAll = not recordAll
-    recordOthersBtn.Text = "👥 Others: "..(recordAll and "ON" or "OFF")
-    recordOthersBtn.BackgroundColor3 = recordAll and Color3.fromRGB(25,90,25) or Color3.fromRGB(40,40,40)
+recordOthersBtn=makeBtn(page1,o1,"👥 Others: OFF",nil,function()
+    recordAll=not recordAll
+    recordOthersBtn.Text="👥 Others: "..(recordAll and "ON" or "OFF")
+    recordOthersBtn.BackgroundColor3=recordAll and Color3.fromRGB(25,90,25) or Color3.fromRGB(40,40,40)
 end); o1+=1
 
-frameCountLabel = Instance.new("TextLabel", page1)
-frameCountLabel.LayoutOrder = o1; o1+=1
-frameCountLabel.Size = UDim2.new(1,0,0,11); frameCountLabel.BackgroundTransparency = 1
-frameCountLabel.TextColor3 = Color3.fromRGB(130,130,130); frameCountLabel.TextSize = 8
-frameCountLabel.Font = Enum.Font.GothamMedium; frameCountLabel.Text = "Frames: 0  |  0s 0f"
+frameCountLabel=Instance.new("TextLabel",page1)
+frameCountLabel.LayoutOrder=o1; o1+=1
+frameCountLabel.Size=UDim2.new(1,0,0,11); frameCountLabel.BackgroundTransparency=1
+frameCountLabel.TextColor3=Color3.fromRGB(130,130,130); frameCountLabel.TextSize=8
+frameCountLabel.Font=Enum.Font.GothamMedium; frameCountLabel.Text="Frames: 0  |  0s 0f"
 
-makeSep(page1, o1); o1+=1
-makeLbl(page1, o1, "  PLAYBACK"); o1+=1
-makeBtn(page1, o1, "▶ Play", nil, playReplay); o1+=1
-makeRow(page1, o1, "⬅ Step", "Step ➡",
+makeSep(page1,o1); o1+=1
+makeLbl(page1,o1,"  PLAYBACK"); o1+=1
+makeBtn(page1,o1,"▶ Play",nil,playReplay); o1+=1
+makeRow(page1,o1,"⬅ Step","Step ➡",
     function() playbackSpeed=0; playbackIndex=math.clamp(playbackIndex-1,1,#replayData) end,
     function() playbackSpeed=0; playbackIndex=math.clamp(playbackIndex+1,1,#replayData) end
 ); o1+=1
-makeBtn(page1, o1, "🧹 Clear Ghosts", nil, cleanupGhosts); o1+=1
+makeBtn(page1,o1,"🧹 Clear Ghosts",nil,cleanupGhosts); o1+=1
 
 local loopBtn
-loopBtn = makeBtn(page1, o1, "🔁 Loop: OFF", nil, function()
-    loopPlayback = not loopPlayback
-    loopBtn.Text = "🔁 Loop: "..(loopPlayback and "ON" or "OFF")
-    loopBtn.BackgroundColor3 = loopPlayback and Color3.fromRGB(25,80,120) or Color3.fromRGB(40,40,40)
+loopBtn=makeBtn(page1,o1,"🔁 Loop: OFF",nil,function()
+    loopPlayback=not loopPlayback
+    loopBtn.Text="🔁 Loop: "..(loopPlayback and "ON" or "OFF")
+    loopBtn.BackgroundColor3=loopPlayback and Color3.fromRGB(25,80,120) or Color3.fromRGB(40,40,40)
 end); o1+=1
 
-local speedLbl = Instance.new("TextLabel", page1)
-speedLbl.LayoutOrder = o1; o1+=1; speedLbl.Size = UDim2.new(1,0,0,11); speedLbl.BackgroundTransparency = 1
-speedLbl.TextColor3 = Color3.fromRGB(130,130,130); speedLbl.TextSize = 8; speedLbl.Font = Enum.Font.GothamMedium
-speedLbl.Text = "Speed: 1.0x"
-makeRow(page1, o1, "◀ Slower", "Faster ▶",
+local speedLbl=Instance.new("TextLabel",page1)
+speedLbl.LayoutOrder=o1; o1+=1; speedLbl.Size=UDim2.new(1,0,0,11); speedLbl.BackgroundTransparency=1
+speedLbl.TextColor3=Color3.fromRGB(130,130,130); speedLbl.TextSize=8; speedLbl.Font=Enum.Font.GothamMedium
+speedLbl.Text="Speed: 1.0x"
+makeRow(page1,o1,"◀ Slower","Faster ▶",
     function() playbackSpeed=math.clamp(math.round((playbackSpeed-0.1)*10)/10,-2,2); speedLbl.Text="Speed: "..playbackSpeed.."x" end,
     function() playbackSpeed=math.clamp(math.round((playbackSpeed+0.1)*10)/10,-2,2); speedLbl.Text="Speed: "..playbackSpeed.."x" end
 ); o1+=1
 
-makeSep(page1, o1); o1+=1
-makeLbl(page1, o1, "  CAMERA"); o1+=1
+makeSep(page1,o1); o1+=1
+makeLbl(page1,o1,"  CAMERA"); o1+=1
 
 local freecamBtn
-freecamBtn = makeBtn(page1, o1, "🎥 Freecam: OFF", nil, function()
+freecamBtn=makeBtn(page1,o1,"🎥 Freecam: OFF",nil,function()
     enableFreecam(not FreecamEnabled)
-    freecamBtn.Text = "🎥 Freecam: "..(FreecamEnabled and "ON" or "OFF")
-    freecamBtn.BackgroundColor3 = FreecamEnabled and Color3.fromRGB(25,70,140) or Color3.fromRGB(40,40,40)
+    freecamBtn.Text="🎥 Freecam: "..(FreecamEnabled and "ON" or "OFF")
+    freecamBtn.BackgroundColor3=FreecamEnabled and Color3.fromRGB(25,70,140) or Color3.fromRGB(40,40,40)
 end); o1+=1
 
 local camModeBtn
-camModeBtn = makeBtn(page1, o1, "🎯 Mode: Free", nil, function()
+camModeBtn=makeBtn(page1,o1,"🎯 Mode: Free",nil,function()
     if camMode=="Free" then camMode="Lock" elseif camMode=="Lock" then camMode="Orbit" else camMode="Free" end
-    smoothCamCF = cam.CFrame
-    camModeBtn.Text = "🎯 Mode: "..camMode
-    camModeBtn.BackgroundColor3 = camMode=="Free" and Color3.fromRGB(40,40,40) or camMode=="Lock" and Color3.fromRGB(25,90,60) or Color3.fromRGB(90,50,20)
+    smoothCamCF=cam.CFrame
+    camModeBtn.Text="🎯 Mode: "..camMode
+    camModeBtn.BackgroundColor3=camMode=="Free" and Color3.fromRGB(40,40,40) or camMode=="Lock" and Color3.fromRGB(25,90,60) or Color3.fromRGB(90,50,20)
 end); o1+=1
 
 local cinematicBtn
-cinematicBtn = makeBtn(page1, o1, "🎞 Cinematic: OFF", nil, function()
-    cinematicCamera = not cinematicCamera; smoothCamCF = cam.CFrame
-    cinematicBtn.Text = "🎞 Cinematic: "..(cinematicCamera and "ON" or "OFF")
-    cinematicBtn.BackgroundColor3 = cinematicCamera and Color3.fromRGB(80,30,120) or Color3.fromRGB(40,40,40)
+cinematicBtn=makeBtn(page1,o1,"🎞 Cinematic: OFF",nil,function()
+    cinematicCamera=not cinematicCamera; smoothCamCF=cam.CFrame
+    cinematicBtn.Text="🎞 Cinematic: "..(cinematicCamera and "ON" or "OFF")
+    cinematicBtn.BackgroundColor3=cinematicCamera and Color3.fromRGB(80,30,120) or Color3.fromRGB(40,40,40)
 end); o1+=1
 
-local fcSpeedLbl = Instance.new("TextLabel", page1)
-fcSpeedLbl.LayoutOrder = o1; o1+=1; fcSpeedLbl.Size = UDim2.new(1,0,0,11); fcSpeedLbl.BackgroundTransparency = 1
-fcSpeedLbl.TextColor3 = Color3.fromRGB(130,130,130); fcSpeedLbl.TextSize = 8; fcSpeedLbl.Font = Enum.Font.GothamMedium
-fcSpeedLbl.Text = "Cam Speed: 0.5"
-makeRow(page1, o1, "- Slower", "Faster +",
+local fcSpeedLbl=Instance.new("TextLabel",page1)
+fcSpeedLbl.LayoutOrder=o1; o1+=1; fcSpeedLbl.Size=UDim2.new(1,0,0,11); fcSpeedLbl.BackgroundTransparency=1
+fcSpeedLbl.TextColor3=Color3.fromRGB(130,130,130); fcSpeedLbl.TextSize=8; fcSpeedLbl.Font=Enum.Font.GothamMedium
+fcSpeedLbl.Text="Cam Speed: 0.5"
+makeRow(page1,o1,"- Slower","Faster +",
     function() camSpeed=math.clamp(math.round((camSpeed-0.1)*10)/10,0.1,5); fcSpeedLbl.Text="Cam Speed: "..camSpeed end,
     function() camSpeed=math.clamp(math.round((camSpeed+0.1)*10)/10,0.1,5); fcSpeedLbl.Text="Cam Speed: "..camSpeed end
 ); o1+=1
 
-local fovLbl = Instance.new("TextLabel", page1)
-fovLbl.LayoutOrder = o1; o1+=1; fovLbl.Size = UDim2.new(1,0,0,11); fovLbl.BackgroundTransparency = 1
-fovLbl.TextColor3 = Color3.fromRGB(130,130,130); fovLbl.TextSize = 8; fovLbl.Font = Enum.Font.GothamMedium
-fovLbl.Text = "FOV: "..math.floor(cam.FieldOfView)
-makeRow(page1, o1, "FOV -", "FOV +",
+local fovLbl=Instance.new("TextLabel",page1)
+fovLbl.LayoutOrder=o1; o1+=1; fovLbl.Size=UDim2.new(1,0,0,11); fovLbl.BackgroundTransparency=1
+fovLbl.TextColor3=Color3.fromRGB(130,130,130); fovLbl.TextSize=8; fovLbl.Font=Enum.Font.GothamMedium
+fovLbl.Text="FOV: "..math.floor(cam.FieldOfView)
+makeRow(page1,o1,"FOV -","FOV +",
     function() cam.FieldOfView=math.clamp(cam.FieldOfView-5,30,120); fovLbl.Text="FOV: "..math.floor(cam.FieldOfView) end,
     function() cam.FieldOfView=math.clamp(cam.FieldOfView+5,30,120); fovLbl.Text="FOV: "..math.floor(cam.FieldOfView) end
 ); o1+=1
 
 local screenshotBtn
-screenshotBtn = makeBtn(page1, o1, "📷 Screenshot Mode", nil, function()
-    screenshotBtn.Text = "📷 Hiding (3s)..."
-    screenshotBtn.BackgroundColor3 = Color3.fromRGB(120,90,20)
-    frame.Visible = false
-    task.delay(3, function()
-        frame.Visible = true
-        screenshotBtn.Text = "📷 Screenshot Mode"
-        screenshotBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+screenshotBtn=makeBtn(page1,o1,"📷 Screenshot Mode",nil,function()
+    screenshotBtn.Text="📷 Hiding (3s)..."
+    screenshotBtn.BackgroundColor3=Color3.fromRGB(120,90,20)
+    frame.Visible=false
+    task.delay(3,function()
+        frame.Visible=true
+        screenshotBtn.Text="📷 Screenshot Mode"
+        screenshotBtn.BackgroundColor3=Color3.fromRGB(40,40,40)
     end)
 end); o1+=1
 
 local nvBtn
-nvBtn = makeBtn(page1, o1, "🌙 NV: OFF", nil, function()
+nvBtn=makeBtn(page1,o1,"🌙 NV: OFF",nil,function()
     setNightVision(not nightVisionEnabled)
-    nvBtn.Text = "🌙 NV: "..(nightVisionEnabled and "ON" or "OFF")
-    nvBtn.BackgroundColor3 = nightVisionEnabled and Color3.fromRGB(0,85,35) or Color3.fromRGB(40,40,40)
+    nvBtn.Text="🌙 NV: "..(nightVisionEnabled and "ON" or "OFF")
+    nvBtn.BackgroundColor3=nightVisionEnabled and Color3.fromRGB(0,85,35) or Color3.fromRGB(40,40,40)
 end); o1+=1
 
 -- PAGE 2 --
-makeLbl(page2, o2, "  SAVE / LOAD"); o2+=1
+makeLbl(page2,o2,"  SAVE / LOAD"); o2+=1
 loadSlotNames()
 
 task.spawn(function()
-    local ok, result = pcall(function()
+    local ok,result=pcall(function()
         if isfile and isfile("flashback_slot1.txt") then
-            local raw = readfile("flashback_slot1.txt")
-            if raw and raw ~= "" then
-                local parsed = deserializeReplay(raw)
-                if parsed and #parsed > 0 then
-                    replayData = parsed
+            local raw=readfile("flashback_slot1.txt")
+            if raw and raw~="" then
+                local parsed=deserializeReplay(raw)
+                if parsed and #parsed>0 then
+                    replayData=parsed
                     warn(("Auto-loaded slot 1! %d frames ready."):format(#replayData))
                     updateFrameLabel()
                 end
@@ -1263,390 +1169,469 @@ task.spawn(function()
     if not ok then warn("Auto-load failed: "..tostring(result)) end
 end)
 
-for slot = 1, 5 do
-    local filename = "flashback_slot"..slot..".txt"
-    makeLbl(page2, o2, "  Slot "..slot); o2+=1
-    local nameBox = makeTextBox(page2, o2, "name this slot..."); o2+=1
-    nameBox.Text = slotNames[slot]
-    nameBox.FocusLost:Connect(function()
-        slotNames[slot] = nameBox.Text
-        saveSlotNames()
-    end)
-    makeRow(page2, o2, "💾 Save "..slot, "📂 Load "..slot,
+for slot=1,5 do
+    local filename="flashback_slot"..slot..".txt"
+    makeLbl(page2,o2,"  Slot "..slot); o2+=1
+    local nameBox=makeTextBox(page2,o2,"name this slot..."); o2+=1
+    nameBox.Text=slotNames[slot]
+    nameBox.FocusLost:Connect(function() slotNames[slot]=nameBox.Text; saveSlotNames() end)
+    makeRow(page2,o2,"💾 Save "..slot,"📂 Load "..slot,
         function()
-            if #replayData == 0 then warn("Nothing to save.") return end
-            local ok, result = pcall(serializeReplay, replayData)
+            if #replayData==0 then warn("Nothing to save.") return end
+            local ok,result=pcall(serializeReplay,replayData)
             if not ok then warn("Serialize failed: "..tostring(result)) return end
-            local fok, ferr = pcall(writefile, filename, result)
+            local fok,ferr=pcall(writefile,filename,result)
             if fok then
-                local name = slotNames[slot] ~= "" and (" \""..slotNames[slot].."\"") or ""
-                warn(("Slot %d%s saved! (%d frames)"):format(slot, name, #replayData))
+                local name=slotNames[slot]~="" and (" \""..slotNames[slot].."\"") or ""
+                warn(("Slot %d%s saved! (%d frames)"):format(slot,name,#replayData))
             else warn("writefile failed: "..tostring(ferr)) end
-            pcall(setclipboard, result)
+            pcall(setclipboard,result)
         end,
         function()
             task.spawn(function()
-                local ok, result = pcall(function()
+                local ok,result=pcall(function()
                     if not isfile or not isfile(filename) then error(filename.." not found.") end
-                    local raw = readfile(filename)
+                    local raw=readfile(filename)
                     if not raw or raw=="" then error("File is empty.") end
                     return deserializeReplay(raw)
                 end)
-                if ok and result and #result > 0 then
-                    replayData = result; updateFrameLabel()
-                    local name = slotNames[slot] ~= "" and (" \""..slotNames[slot].."\"") or ""
-                    warn(("Slot %d%s loaded! %d frames ready."):format(slot, name, #replayData))
+                if ok and result and #result>0 then
+                    replayData=result; updateFrameLabel()
+                    local name=slotNames[slot]~="" and (" \""..slotNames[slot].."\"") or ""
+                    warn(("Slot %d%s loaded! %d frames ready."):format(slot,name,#replayData))
                 else warn("Load slot "..slot.." failed: "..tostring(result)) end
             end)
         end
     ); o2+=1
-    if slot < 5 then makeSep(page2, o2); o2+=1 end
+    if slot<5 then makeSep(page2,o2); o2+=1 end
 end
 
-makeSep(page2, o2); o2+=1
-makeLbl(page2, o2, "  PASTE CODE"); o2+=1
-local codeBox = makeTextBox(page2, o2, "Paste code here..."); o2+=1
-makeBtn(page2, o2, "📂 Load from Code", nil, function()
-    local raw = codeBox.Text
+makeSep(page2,o2); o2+=1
+makeLbl(page2,o2,"  PASTE CODE"); o2+=1
+local codeBox=makeTextBox(page2,o2,"Paste code here..."); o2+=1
+makeBtn(page2,o2,"📂 Load from Code",nil,function()
+    local raw=codeBox.Text
     if not raw or raw=="" then warn("No code entered.") return end
     task.spawn(function()
-        local ok, result = pcall(deserializeReplay, raw)
-        if ok and result and #result > 0 then
-            replayData = result; codeBox.Text = ""; updateFrameLabel()
+        local ok,result=pcall(deserializeReplay,raw)
+        if ok and result and #result>0 then
+            replayData=result; codeBox.Text=""; updateFrameLabel()
             warn(("Loaded from code! %d frames ready."):format(#replayData))
         else warn("Load failed: "..tostring(result)) end
     end)
 end); o2+=1
 
-makeSep(page2, o2); o2+=1
-makeLbl(page2, o2, "  FX"); o2+=1
+makeSep(page2,o2); o2+=1
+makeLbl(page2,o2,"  FX"); o2+=1
 local mblurBtn
-mblurBtn = makeBtn(page2, o2, "💫 Motion Blur: OFF", nil, function()
-    motionBlurEnabled = not motionBlurEnabled
-    if not motionBlurEnabled then motionBlur.Size = 0 end
-    mblurBtn.Text = "💫 Motion Blur: "..(motionBlurEnabled and "ON" or "OFF")
-    mblurBtn.BackgroundColor3 = motionBlurEnabled and Color3.fromRGB(80,50,120) or Color3.fromRGB(40,40,40)
+mblurBtn=makeBtn(page2,o2,"💫 Motion Blur: OFF",nil,function()
+    motionBlurEnabled=not motionBlurEnabled
+    if not motionBlurEnabled then motionBlur.Size=0 end
+    mblurBtn.Text="💫 Motion Blur: "..(motionBlurEnabled and "ON" or "OFF")
+    mblurBtn.BackgroundColor3=motionBlurEnabled and Color3.fromRGB(80,50,120) or Color3.fromRGB(40,40,40)
 end); o2+=1
-makeLbl(page2, o2, "  Check console for updates."); o2+=1
+makeLbl(page2,o2,"  Check console for updates."); o2+=1
 
 -- PAGE 3 --
-makeLbl(page3, o3, "  COLOR GRADING"); o3+=1
-makeFXBtn(page3, o3, "🟤 Sepia", Color3.fromRGB(120,80,30), function()
-    sepiaEnabled = not sepiaEnabled; sepiaCC.Enabled = sepiaEnabled; return sepiaEnabled
+makeLbl(page3,o3,"  COLOR GRADING"); o3+=1
+makeFXBtn(page3,o3,"🟤 Sepia",Color3.fromRGB(120,80,30),function()
+    sepiaEnabled=not sepiaEnabled; sepiaCC.Enabled=sepiaEnabled; return sepiaEnabled
 end); o3+=1
-makeFXBtn(page3, o3, "⬜ Black & White", Color3.fromRGB(60,60,60), function()
-    bwEnabled = not bwEnabled; bwCC.Enabled = bwEnabled; return bwEnabled
+makeFXBtn(page3,o3,"⬜ Black & White",Color3.fromRGB(60,60,60),function()
+    bwEnabled=not bwEnabled; bwCC.Enabled=bwEnabled; return bwEnabled
 end); o3+=1
-makeFXBtn(page3, o3, "📼 VHS", Color3.fromRGB(100,40,100), function()
-    vhsEnabled = not vhsEnabled; vhsCC.Enabled = vhsEnabled; return vhsEnabled
+makeFXBtn(page3,o3,"📼 VHS",Color3.fromRGB(100,40,100),function()
+    vhsEnabled=not vhsEnabled; vhsCC.Enabled=vhsEnabled; return vhsEnabled
 end); o3+=1
-makeFXBtn(page3, o3, "🌅 Sunset", Color3.fromRGB(150,80,20), function()
-    sunsetEnabled = not sunsetEnabled; sunsetCC.Enabled = sunsetEnabled; return sunsetEnabled
+makeFXBtn(page3,o3,"🌅 Sunset",Color3.fromRGB(150,80,20),function()
+    sunsetEnabled=not sunsetEnabled; sunsetCC.Enabled=sunsetEnabled; return sunsetEnabled
 end); o3+=1
-makeFXBtn(page3, o3, "🌈 Neon/Retrowave", Color3.fromRGB(100,20,160), function()
-    neonEnabled = not neonEnabled; neonCC.Enabled = neonEnabled; neonBloom.Enabled = neonEnabled; return neonEnabled
+makeFXBtn(page3,o3,"🌈 Neon/Retrowave",Color3.fromRGB(100,20,160),function()
+    neonEnabled=not neonEnabled; neonCC.Enabled=neonEnabled; neonBloom.Enabled=neonEnabled; return neonEnabled
 end); o3+=1
-makeSep(page3, o3); o3+=1
-makeLbl(page3, o3, "  ATMOSPHERE"); o3+=1
-makeFXBtn(page3, o3, "🌫 Fog", Color3.fromRGB(60,80,100), function()
+makeSep(page3,o3); o3+=1
+makeLbl(page3,o3,"  ATMOSPHERE"); o3+=1
+makeFXBtn(page3,o3,"🌫 Fog",Color3.fromRGB(60,80,100),function()
     setFog(not fogEnabled); return fogEnabled
 end); o3+=1
-makeFXBtn(page3, o3, "🔍 Depth of Field", Color3.fromRGB(40,80,120), function()
-    dofEnabled = not dofEnabled; dofEffect.Enabled = dofEnabled; return dofEnabled
+makeFXBtn(page3,o3,"🔍 Depth of Field",Color3.fromRGB(40,80,120),function()
+    dofEnabled=not dofEnabled; dofEffect.Enabled=dofEnabled; return dofEnabled
 end); o3+=1
-makeSep(page3, o3); o3+=1
-makeLbl(page3, o3, "  CINEMATIC"); o3+=1
-makeFXBtn(page3, o3, "🎬 Cine Bars", Color3.fromRGB(30,30,30), function()
-    cineBarsEnabled = not cineBarsEnabled
-    cineBarsTop.Visible = cineBarsEnabled
-    cineBarsBot.Visible = cineBarsEnabled
+makeSep(page3,o3); o3+=1
+makeLbl(page3,o3,"  CINEMATIC"); o3+=1
+makeFXBtn(page3,o3,"🎬 Cine Bars",Color3.fromRGB(30,30,30),function()
+    cineBarsEnabled=not cineBarsEnabled
+    cineBarsTop.Visible=cineBarsEnabled; cineBarsBot.Visible=cineBarsEnabled
     return cineBarsEnabled
 end); o3+=1
-makeFXBtn(page3, o3, "🕶 Vignette", Color3.fromRGB(30,30,60), function()
-    vignetteEnabled = not vignetteEnabled
-    vignetteCC.Enabled = vignetteEnabled
-    return vignetteEnabled
+makeFXBtn(page3,o3,"🕶 Vignette",Color3.fromRGB(30,30,60),function()
+    vignetteEnabled=not vignetteEnabled; vignetteCC.Enabled=vignetteEnabled; return vignetteEnabled
 end); o3+=1
-makeFXBtn(page3, o3, "📽 Film Grain", Color3.fromRGB(50,50,50), function()
-    filmGrainEnabled = not filmGrainEnabled
-    if not filmGrainEnabled then grainFrame.Visible = false end
+makeFXBtn(page3,o3,"📽 Film Grain",Color3.fromRGB(50,50,50),function()
+    filmGrainEnabled=not filmGrainEnabled
+    if not filmGrainEnabled then grainFrame.Visible=false end
     return filmGrainEnabled
 end); o3+=1
-makeFXBtn(page3, o3, "💓 Heartbeat Pulse", Color3.fromRGB(120,20,40), function()
-    heartbeatEnabled = not heartbeatEnabled
-    if not heartbeatEnabled then heartbeatCC.Enabled = false end
+makeFXBtn(page3,o3,"💓 Heartbeat Pulse",Color3.fromRGB(120,20,40),function()
+    heartbeatEnabled=not heartbeatEnabled
+    if not heartbeatEnabled then heartbeatCC.Enabled=false end
     return heartbeatEnabled
 end); o3+=1
 
 -- PAGE 4 --
-makeLbl(page4, o4, "  PARTICLES"); o4+=1
+makeLbl(page4,o4,"  PARTICLES"); o4+=1
 local followBtn
-followBtn = makeBtn(page4, o4, "📍 Particles: Follow Cam", nil, function()
-    weatherParticlesFollow = not weatherParticlesFollow
-    followBtn.Text = weatherParticlesFollow and "📍 Particles: Follow Cam" or "🌍 Particles: World Fixed"
-    followBtn.BackgroundColor3 = weatherParticlesFollow and Color3.fromRGB(25,80,120) or Color3.fromRGB(60,50,20)
+followBtn=makeBtn(page4,o4,"📍 Particles: Follow Cam",nil,function()
+    weatherParticlesFollow=not weatherParticlesFollow
+    followBtn.Text=weatherParticlesFollow and "📍 Particles: Follow Cam" or "🌍 Particles: World Fixed"
+    followBtn.BackgroundColor3=weatherParticlesFollow and Color3.fromRGB(25,80,120) or Color3.fromRGB(60,50,20)
 end); o4+=1
-
-makeSep(page4, o4); o4+=1
-makeLbl(page4, o4, "  WEATHER"); o4+=1
-
-makeWeatherBtn(page4, o4, "🌧 Rain", Color3.fromRGB(30,60,120), function()
-    applyWeather({
-        rain = 600,
-        cc = {tint=Color3.fromRGB(180,200,255), brightness=-0.1, contrast=0.1},
-        fog = {e=400, s=50, c=Color3.fromRGB(150,160,180)},
-    })
-    rainEnabled = true
+makeSep(page4,o4); o4+=1
+makeLbl(page4,o4,"  WEATHER"); o4+=1
+makeWeatherBtn(page4,o4,"🌧 Rain",Color3.fromRGB(30,60,120),function()
+    applyWeather({rain=600,cc={tint=Color3.fromRGB(180,200,255),brightness=-0.1,contrast=0.1},fog={e=400,s=50,c=Color3.fromRGB(150,160,180)}})
+    rainEnabled=true
 end); o4+=1
-
-makeWeatherBtn(page4, o4, "⛈ Thunderstorm", Color3.fromRGB(30,30,80), function()
-    applyWeather({
-        rain = 1000,
-        cc = {tint=Color3.fromRGB(150,160,200), brightness=-0.2, contrast=0.2},
-        fog = {e=200, s=20, c=Color3.fromRGB(80,80,100)},
-        blur = 2,
-    })
-    rainEnabled = true
-    thunderEnabled = true
+makeWeatherBtn(page4,o4,"⛈ Thunderstorm",Color3.fromRGB(30,30,80),function()
+    applyWeather({rain=1000,cc={tint=Color3.fromRGB(150,160,200),brightness=-0.2,contrast=0.2},fog={e=200,s=20,c=Color3.fromRGB(80,80,100)},blur=2})
+    rainEnabled=true; thunderEnabled=true
 end); o4+=1
-
-makeWeatherBtn(page4, o4, "🌨 Snow", Color3.fromRGB(160,200,220), function()
-    applyWeather({
-        snow = 300,
-        cc = {tint=Color3.fromRGB(210,230,255), brightness=0.05, saturation=-0.3},
-        fog = {e=300, s=30, c=Color3.fromRGB(200,210,220)},
-    })
-    snowEnabled = true
+makeWeatherBtn(page4,o4,"🌨 Snow",Color3.fromRGB(160,200,220),function()
+    applyWeather({snow=300,cc={tint=Color3.fromRGB(210,230,255),brightness=0.05,saturation=-0.3},fog={e=300,s=30,c=Color3.fromRGB(200,210,220)}})
+    snowEnabled=true
 end); o4+=1
-
-makeWeatherBtn(page4, o4, "🌪 Blizzard", Color3.fromRGB(100,140,180), function()
-    applyWeather({
-        snow = 1000,
-        cc = {tint=Color3.fromRGB(200,220,255), brightness=0.1, saturation=-0.5, contrast=0.2},
-        fog = {e=80, s=5, c=Color3.fromRGB(220,230,240)},
-        blur = 3,
-    })
-    blizzardEnabled = true
-    snowEnabled = true
+makeWeatherBtn(page4,o4,"🌪 Blizzard",Color3.fromRGB(100,140,180),function()
+    applyWeather({snow=1000,cc={tint=Color3.fromRGB(200,220,255),brightness=0.1,saturation=-0.5,contrast=0.2},fog={e=80,s=5,c=Color3.fromRGB(220,230,240)},blur=3})
+    blizzardEnabled=true; snowEnabled=true
 end); o4+=1
-
-makeWeatherBtn(page4, o4, "🏜 Sandstorm", Color3.fromRGB(160,110,30), function()
-    applyWeather({
-        sand = 700,
-        cc = {tint=Color3.fromRGB(255,200,100), brightness=-0.05, saturation=-0.2, contrast=0.1},
-        fog = {e=100, s=10, c=Color3.fromRGB(200,160,80)},
-        blur = 2,
-    })
-    sandstormEnabled = true
+makeWeatherBtn(page4,o4,"🏜 Sandstorm",Color3.fromRGB(160,110,30),function()
+    applyWeather({sand=700,cc={tint=Color3.fromRGB(255,200,100),brightness=-0.05,saturation=-0.2,contrast=0.1},fog={e=100,s=10,c=Color3.fromRGB(200,160,80)},blur=2})
+    sandstormEnabled=true
 end); o4+=1
-
-makeSep(page4, o4); o4+=1
-makeLbl(page4, o4, "  TIME OF DAY"); o4+=1
-
-makeWeatherBtn(page4, o4, "🌅 Dawn", Color3.fromRGB(180,100,40), function()
-    applyWeather({
-        cc = {tint=Color3.fromRGB(255,200,150), brightness=0.05, saturation=0.2},
-        clock = 6,
-        ambient = Color3.fromRGB(180,120,80),
-        outdoor = Color3.fromRGB(200,140,100),
-    })
-    dawnEnabled = true
+makeSep(page4,o4); o4+=1
+makeLbl(page4,o4,"  TIME OF DAY"); o4+=1
+makeWeatherBtn(page4,o4,"🌅 Dawn",Color3.fromRGB(180,100,40),function()
+    applyWeather({cc={tint=Color3.fromRGB(255,200,150),brightness=0.05,saturation=0.2},clock=6,ambient=Color3.fromRGB(180,120,80),outdoor=Color3.fromRGB(200,140,100)})
+    dawnEnabled=true
 end); o4+=1
-
-makeWeatherBtn(page4, o4, "🌇 Dusk", Color3.fromRGB(160,60,20), function()
-    applyWeather({
-        cc = {tint=Color3.fromRGB(255,160,80), brightness=-0.05, saturation=0.3},
-        clock = 19,
-        ambient = Color3.fromRGB(160,80,40),
-        outdoor = Color3.fromRGB(180,100,60),
-    })
-    duskEnabled = true
+makeWeatherBtn(page4,o4,"🌇 Dusk",Color3.fromRGB(160,60,20),function()
+    applyWeather({cc={tint=Color3.fromRGB(255,160,80),brightness=-0.05,saturation=0.3},clock=19,ambient=Color3.fromRGB(160,80,40),outdoor=Color3.fromRGB(180,100,60)})
+    duskEnabled=true
 end); o4+=1
-
-makeWeatherBtn(page4, o4, "🌃 Midnight", Color3.fromRGB(10,10,60), function()
-    applyWeather({
-        cc = {tint=Color3.fromRGB(80,90,160), brightness=-0.3, contrast=0.2, saturation=-0.3},
-        clock = 0,
-        ambient = Color3.fromRGB(10,10,40),
-        outdoor = Color3.fromRGB(15,15,50),
-        brightness = 0.1,
-    })
-    midnightEnabled = true
+makeWeatherBtn(page4,o4,"🌃 Midnight",Color3.fromRGB(10,10,60),function()
+    applyWeather({cc={tint=Color3.fromRGB(80,90,160),brightness=-0.3,contrast=0.2,saturation=-0.3},clock=0,ambient=Color3.fromRGB(10,10,40),outdoor=Color3.fromRGB(15,15,50),brightness=0.1})
+    midnightEnabled=true
 end); o4+=1
-
-makeWeatherBtn(page4, o4, "☀️ Midday", Color3.fromRGB(200,180,60), function()
-    applyWeather({
-        cc = {tint=Color3.fromRGB(255,250,220), brightness=0.15, contrast=0.1, saturation=0.1},
-        clock = 12,
-        brightness = 3,
-        ambient = Color3.fromRGB(180,180,180),
-        outdoor = Color3.fromRGB(200,200,200),
-    })
-    middayEnabled = true
+makeWeatherBtn(page4,o4,"☀️ Midday",Color3.fromRGB(200,180,60),function()
+    applyWeather({cc={tint=Color3.fromRGB(255,250,220),brightness=0.15,contrast=0.1,saturation=0.1},clock=12,brightness=3,ambient=Color3.fromRGB(180,180,180),outdoor=Color3.fromRGB(200,200,200)})
+    middayEnabled=true
 end); o4+=1
-
-makeWeatherBtn(page4, o4, "🌑 Eclipse", Color3.fromRGB(40,0,0), function()
-    applyWeather({
-        cc = {tint=Color3.fromRGB(180,60,60), brightness=-0.4, contrast=0.3, saturation=-0.2},
-        clock = 12,
-        brightness = 0.2,
-        ambient = Color3.fromRGB(40,10,10),
-        outdoor = Color3.fromRGB(50,15,15),
-        fog = {e=500, s=100, c=Color3.fromRGB(80,20,20)},
-    })
-    eclipseEnabled = true
+makeWeatherBtn(page4,o4,"🌑 Eclipse",Color3.fromRGB(40,0,0),function()
+    applyWeather({cc={tint=Color3.fromRGB(180,60,60),brightness=-0.4,contrast=0.3,saturation=-0.2},clock=12,brightness=0.2,ambient=Color3.fromRGB(40,10,10),outdoor=Color3.fromRGB(50,15,15),fog={e=500,s=100,c=Color3.fromRGB(80,20,20)}})
+    eclipseEnabled=true
 end); o4+=1
-
-makeSep(page4, o4); o4+=1
-makeLbl(page4, o4, "  ENVIRONMENT"); o4+=1
-
-makeWeatherBtn(page4, o4, "🌊 Underwater", Color3.fromRGB(0,60,120), function()
-    applyWeather({
-        cc = {tint=Color3.fromRGB(60,140,200), brightness=-0.1, saturation=0.2, contrast=0.1},
-        fog = {e=150, s=10, c=Color3.fromRGB(0,80,140)},
-        blur = 4,
-        bloom = {i=0.5, s=20, t=0.8},
-    })
-    underwaterEnabled = true
+makeSep(page4,o4); o4+=1
+makeLbl(page4,o4,"  ENVIRONMENT"); o4+=1
+makeWeatherBtn(page4,o4,"🌊 Underwater",Color3.fromRGB(0,60,120),function()
+    applyWeather({cc={tint=Color3.fromRGB(60,140,200),brightness=-0.1,saturation=0.2,contrast=0.1},fog={e=150,s=10,c=Color3.fromRGB(0,80,140)},blur=4,bloom={i=0.5,s=20,t=0.8}})
+    underwaterEnabled=true
 end); o4+=1
-
-makeWeatherBtn(page4, o4, "❄️ Arctic Freeze", Color3.fromRGB(160,200,255), function()
-    applyWeather({
-        cc = {tint=Color3.fromRGB(180,220,255), brightness=0.1, saturation=-0.6, contrast=0.2},
-        fog = {e=200, s=20, c=Color3.fromRGB(200,220,240)},
-        brightness = 1.5,
-    })
-    arcticEnabled = true
+makeWeatherBtn(page4,o4,"❄️ Arctic Freeze",Color3.fromRGB(160,200,255),function()
+    applyWeather({cc={tint=Color3.fromRGB(180,220,255),brightness=0.1,saturation=-0.6,contrast=0.2},fog={e=200,s=20,c=Color3.fromRGB(200,220,240)},brightness=1.5})
+    arcticEnabled=true
 end); o4+=1
-
-makeWeatherBtn(page4, o4, "🎮 Retro/8-bit", Color3.fromRGB(0,120,0), function()
-    applyWeather({
-        cc = {tint=Color3.fromRGB(100,255,100), brightness=0, saturation=2, contrast=0.8},
-    })
-    retroEnabled = true
+makeWeatherBtn(page4,o4,"🎮 Retro/8-bit",Color3.fromRGB(0,120,0),function()
+    applyWeather({cc={tint=Color3.fromRGB(100,255,100),brightness=0,saturation=2,contrast=0.8}})
+    retroEnabled=true
 end); o4+=1
-
-makeWeatherBtn(page4, o4, "📺 Old TV", Color3.fromRGB(60,60,60), function()
+makeWeatherBtn(page4,o4,"📺 Old TV",Color3.fromRGB(60,60,60),function()
     applyWeather({})
-    oldtvEnabled = true
-    tvFlickerCC.Enabled = true
-    tvFrame.Visible = true
+    oldtvEnabled=true; tvFlickerCC.Enabled=true; tvFrame.Visible=true
+end); o4+=1
+makeWeatherBtn(page4,o4,"🕯 Candlelight",Color3.fromRGB(140,80,10),function()
+    applyWeather({fog={e=200,s=30,c=Color3.fromRGB(120,80,40)},brightness=0.5})
+    candleEnabled=true; candleCC.Enabled=true
+end); o4+=1
+makeWeatherBtn(page4,o4,"🌌 Space",Color3.fromRGB(0,0,40),function()
+    applyWeather({cc={tint=Color3.fromRGB(80,80,160),brightness=-0.2,contrast=0.4,saturation=-0.3},bloom={i=2,s=40,t=0.5},clock=0,brightness=0.8,ambient=Color3.fromRGB(40,40,80),outdoor=Color3.fromRGB(30,30,60)})
+    spaceEnabled=true
+end); o4+=1
+makeWeatherBtn(page4,o4,"💊 Acid Trip",Color3.fromRGB(180,0,180),function()
+    applyWeather({bloom={i=1.5,s=30,t=0.4},blur=1})
+    acidEnabled=true; acidCC.Enabled=true
+end); o4+=1
+makeWeatherBtn(page4,o4,"🩸 Blood Moon",Color3.fromRGB(100,0,0),function()
+    applyWeather({cc={tint=Color3.fromRGB(255,80,80),brightness=0.1,contrast=0.3,saturation=0.4},fog={e=500,s=80,c=Color3.fromRGB(140,20,20)},clock=0,brightness=1.5,ambient=Color3.fromRGB(120,20,20),outdoor=Color3.fromRGB(140,30,30),bloom={i=0.8,s=20,t=0.8}})
+    bloodMoonEnabled=true
+end); o4+=1
+makeBtn(page4,o4,"✖ Clear Weather",Color3.fromRGB(80,30,30),function()
+    if activeWeatherBtn then activeWeatherBtn.BackgroundColor3=Color3.fromRGB(40,40,40); activeWeatherBtn=nil end
+    disableAllWeatherShaders(); tvFrame.Visible=false
 end); o4+=1
 
-makeWeatherBtn(page4, o4, "🕯 Candlelight", Color3.fromRGB(140,80,10), function()
-    applyWeather({
-        fog = {e=200, s=30, c=Color3.fromRGB(120,80,40)},
-        brightness = 0.5,
-    })
-    candleEnabled = true
-    candleCC.Enabled = true
-end); o4+=1
+-- PAGE 5 - HOTKEYS --
+makeLbl(page5,o5,"  KEYBINDS"); o5+=1
+makeSep(page5,o5); o5+=1
+makeHotkeyRow(page5,o5,"R","Start / Stop Record"); o5+=1
+makeHotkeyRow(page5,o5,"P","Play Replay"); o5+=1
+makeHotkeyRow(page5,o5,"F","Toggle Freecam"); o5+=1
+makeHotkeyRow(page5,o5,"X","Clear Ghosts"); o5+=1
+makeHotkeyRow(page5,o5,"←","Step Back 1 Frame"); o5+=1
+makeHotkeyRow(page5,o5,"→","Step Fwd 1 Frame"); o5+=1
+makeHotkeyRow(page5,o5,"W/S","Freecam Fwd / Back"); o5+=1
+makeHotkeyRow(page5,o5,"A/D","Freecam Left / Right"); o5+=1
+makeHotkeyRow(page5,o5,"E/Q","Freecam Up / Down"); o5+=1
+makeSep(page5,o5); o5+=1
+makeLbl(page5,o5,"  CAM PATH KEYS"); o5+=1
+makeSep(page5,o5); o5+=1
+makeHotkeyRow(page5,o5,"J","Start / Stop Path Rec"); o5+=1
+makeHotkeyRow(page5,o5,"K","Play Camera Path"); o5+=1
+makeHotkeyRow(page5,o5,"L","Clear Camera Path"); o5+=1
 
-makeWeatherBtn(page4, o4, "🌌 Space", Color3.fromRGB(0,0,40), function()
-    applyWeather({
-        cc = {tint=Color3.fromRGB(80,80,160), brightness=-0.2, contrast=0.4, saturation=-0.3},
-        bloom = {i=2, s=40, t=0.5},
-        clock = 0,
-        brightness = 0.8,
-        ambient = Color3.fromRGB(40,40,80),
-        outdoor = Color3.fromRGB(30,30,60),
-    })
-    spaceEnabled = true
-end); o4+=1
+-- PAGE 6 - CAM PATH + MUSIC --
+makeLbl(page6,o6,"  CAMERA PATH"); o6+=1
 
-makeWeatherBtn(page4, o4, "💊 Acid Trip", Color3.fromRGB(180,0,180), function()
-    applyWeather({
-        bloom = {i=1.5, s=30, t=0.4},
-        blur = 1,
-    })
-    acidEnabled = true
-    acidCC.Enabled = true
-end); o4+=1
+local camPathStatusLbl=Instance.new("TextLabel",page6)
+camPathStatusLbl.LayoutOrder=o6; o6+=1
+camPathStatusLbl.Size=UDim2.new(1,0,0,11); camPathStatusLbl.BackgroundTransparency=1
+camPathStatusLbl.TextColor3=Color3.fromRGB(130,130,130); camPathStatusLbl.TextSize=8
+camPathStatusLbl.Font=Enum.Font.GothamMedium; camPathStatusLbl.Text="Path: 0 frames"
 
-makeWeatherBtn(page4, o4, "🩸 Blood Moon", Color3.fromRGB(100,0,0), function()
-    applyWeather({
-        cc = {tint=Color3.fromRGB(255,80,80), brightness=0.1, contrast=0.3, saturation=0.4},
-        fog = {e=500, s=80, c=Color3.fromRGB(140,20,20)},
-        clock = 0,
-        brightness = 1.5,
-        ambient = Color3.fromRGB(120,20,20),
-        outdoor = Color3.fromRGB(140,30,30),
-        bloom = {i=0.8, s=20, t=0.8},
-    })
-    bloodMoonEnabled = true
-end); o4+=1
-
-makeBtn(page4, o4, "✖ Clear Weather", Color3.fromRGB(80,30,30), function()
-    if activeWeatherBtn then
-        activeWeatherBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
-        activeWeatherBtn = nil
-    end
-    disableAllWeatherShaders()
-    tvFrame.Visible = false
-end); o4+=1
-
--- Nav
-local currentPage = 1
-local navRow = Instance.new("Frame", frame)
-navRow.LayoutOrder = 2; navRow.Size = UDim2.new(1,0,0,20); navRow.BackgroundTransparency = 1
-local navLayout = Instance.new("UIListLayout", navRow)
-navLayout.FillDirection = Enum.FillDirection.Horizontal
-navLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-navLayout.Padding = UDim.new(0,3)
-
-local backBtn = Instance.new("TextButton", navRow)
-backBtn.Size = UDim2.new(0.48,0,1,0); backBtn.BackgroundColor3 = Color3.fromRGB(35,35,35)
-backBtn.TextColor3 = Color3.fromRGB(180,180,180); backBtn.TextSize = 8
-backBtn.Font = Enum.Font.GothamMedium; backBtn.Text = "← Back"
-backBtn.AutoButtonColor = true; backBtn.Visible = false
-Instance.new("UICorner", backBtn).CornerRadius = UDim.new(0,4)
-
-local nextBtn = Instance.new("TextButton", navRow)
-nextBtn.Size = UDim2.new(0.48,0,1,0); nextBtn.BackgroundColor3 = Color3.fromRGB(35,35,35)
-nextBtn.TextColor3 = Color3.fromRGB(180,180,180); nextBtn.TextSize = 8
-nextBtn.Font = Enum.Font.GothamMedium; nextBtn.Text = "Page 2 →"
-nextBtn.AutoButtonColor = true
-Instance.new("UICorner", nextBtn).CornerRadius = UDim.new(0,4)
-
-local function showPage(n)
-    currentPage = n
-    page1.Visible = n == 1
-    page2.Visible = n == 2
-    page3.Visible = n == 3
-    page4.Visible = n == 4
-    backBtn.Visible = n > 1
-    nextBtn.Visible = n < 4
-    if n == 1 then nextBtn.Text = "Page 2 →"
-    elseif n == 2 then nextBtn.Text = "Page 3 →"
-    elseif n == 3 then nextBtn.Text = "Page 4 →"
-    end
+local camPathRecBtn
+local function startCamPathRec()
+    camPathFrames={}; camPathRecording=true
+    camPathRecBtn.Text="⏹ Stop Path Rec"
+    camPathRecBtn.BackgroundColor3=Color3.fromRGB(160,28,28)
+    task.spawn(function()
+        while camPathRecording do
+            camPathFrames[#camPathFrames+1]=cam.CFrame
+            camPathStatusLbl.Text="Recording: "..#camPathFrames.." frames"
+            task.wait(1/60)
+        end
+    end)
 end
 
-nextBtn.MouseButton1Click:Connect(function() showPage(currentPage + 1) end)
-backBtn.MouseButton1Click:Connect(function() showPage(currentPage - 1) end)
+local function stopCamPathRec()
+    camPathRecording=false
+    camPathRecBtn.Text="⏺ Record Path"
+    camPathRecBtn.BackgroundColor3=Color3.fromRGB(40,40,40)
+    camPathStatusLbl.Text="Path: "..#camPathFrames.." frames"
+end
+
+camPathRecBtn=makeBtn(page6,o6,"⏺ Record Path",nil,function()
+    if not camPathRecording then startCamPathRec() else stopCamPathRec() end
+end); o6+=1
+
+local camPathSpeedLbl=Instance.new("TextLabel",page6)
+camPathSpeedLbl.LayoutOrder=o6; o6+=1
+camPathSpeedLbl.Size=UDim2.new(1,0,0,11); camPathSpeedLbl.BackgroundTransparency=1
+camPathSpeedLbl.TextColor3=Color3.fromRGB(130,130,130); camPathSpeedLbl.TextSize=8
+camPathSpeedLbl.Font=Enum.Font.GothamMedium; camPathSpeedLbl.Text="Path Speed: 1.0x"
+makeRow(page6,o6,"◀ Slower","Faster ▶",
+    function() camPathSpeed=math.clamp(math.round((camPathSpeed-0.1)*10)/10,0.1,4); camPathSpeedLbl.Text="Path Speed: "..camPathSpeed.."x" end,
+    function() camPathSpeed=math.clamp(math.round((camPathSpeed+0.1)*10)/10,0.1,4); camPathSpeedLbl.Text="Path Speed: "..camPathSpeed.."x" end
+); o6+=1
+
+local function playCamPath()
+    if #camPathFrames<2 then warn("No camera path recorded.") return end
+    if not FreecamEnabled then warn("Enable Freecam first.") return end
+    camPathPlaying=true; camPathIndex=1
+    camPathStatusLbl.Text="▶ Playing path..."
+    task.spawn(function()
+        while camPathPlaying and camPathIndex<#camPathFrames do
+            camPathIndex=math.min(camPathIndex+camPathSpeed,#camPathFrames)
+            local a=math.floor(camPathIndex)
+            local b=math.min(a+1,#camPathFrames)
+            local t=camPathIndex-a
+            cam.CFrame=camPathFrames[a]:Lerp(camPathFrames[b],t)
+            task.wait(1/60)
+        end
+        camPathPlaying=false
+        camPathStatusLbl.Text="Path: "..#camPathFrames.." frames"
+    end)
+end
+
+makeBtn(page6,o6,"▶ Play Path",nil,playCamPath); o6+=1
+makeBtn(page6,o6,"⏹ Stop Path",nil,function()
+    camPathPlaying=false
+    camPathStatusLbl.Text="Path: "..#camPathFrames.." frames"
+end); o6+=1
+makeBtn(page6,o6,"🧹 Clear Path",nil,function()
+    camPathPlaying=false; camPathRecording=false; camPathFrames={}
+    camPathRecBtn.Text="⏺ Record Path"
+    camPathRecBtn.BackgroundColor3=Color3.fromRGB(40,40,40)
+    camPathStatusLbl.Text="Path: 0 frames"
+end); o6+=1
+
+makeSep(page6,o6); o6+=1
+makeLbl(page6,o6,"  MUSIC"); o6+=1
+
+local musicStatusLbl=Instance.new("TextLabel",page6)
+musicStatusLbl.LayoutOrder=o6; o6+=1
+musicStatusLbl.Size=UDim2.new(1,0,0,11); musicStatusLbl.BackgroundTransparency=1
+musicStatusLbl.TextColor3=Color3.fromRGB(130,130,130); musicStatusLbl.TextSize=8
+musicStatusLbl.Font=Enum.Font.GothamMedium; musicStatusLbl.Text="No track loaded"
+
+makeLbl(page6,o6,"  Asset ID"); o6+=1
+local musicIdBox=makeTextBox(page6,o6,"Enter asset ID..."); o6+=1
+makeBtn(page6,o6,"▶ Play by ID",nil,function()
+    local id=musicIdBox.Text:match("%d+")
+    if not id then warn("Invalid ID.") return end
+    bgMusic.SoundId="rbxassetid://"..id
+    bgMusic:Play()
+    musicStatusLbl.Text="Playing ID: "..id
+end); o6+=1
+
+makeSep(page6,o6); o6+=1
+makeLbl(page6,o6,"  Search Roblox Audio"); o6+=1
+local musicSearchBox=makeTextBox(page6,o6,"Search audio name..."); o6+=1
+
+local searchResultsFrame=Instance.new("Frame",page6)
+searchResultsFrame.LayoutOrder=o6; o6+=1
+searchResultsFrame.Size=UDim2.new(1,0,0,0); searchResultsFrame.AutomaticSize=Enum.AutomaticSize.Y
+searchResultsFrame.BackgroundTransparency=1
+local srLayout=Instance.new("UIListLayout",searchResultsFrame)
+srLayout.Padding=UDim.new(0,2); srLayout.SortOrder=Enum.SortOrder.LayoutOrder
+
+makeBtn(page6,o6,"🔍 Search",nil,function()
+    local query=musicSearchBox.Text
+    if not query or query=="" then warn("Enter a search term.") return end
+    musicStatusLbl.Text="Searching..."
+    for _,c in ipairs(searchResultsFrame:GetChildren()) do
+        if not c:IsA("UIListLayout") then c:Destroy() end
+    end
+    task.spawn(function()
+        local ok,result=pcall(function()
+            local url="https://catalog.roproxy.com/v1/search/items?category=Audio&keyword="..HttpService:UrlEncode(query).."&limit=5"
+            local response=game:HttpGet(url)
+            return HttpService:JSONDecode(response)
+        end)
+        if not ok or not result or not result.data then
+            musicStatusLbl.Text="Search failed."
+            warn("Music search failed: "..tostring(result))
+            return
+        end
+        if #result.data==0 then musicStatusLbl.Text="No results found." return end
+        musicStatusLbl.Text="Found "..(#result.data).." results"
+        local ri=0
+        for _,item in ipairs(result.data) do
+            local itemId=tostring(item.id)
+            local itemName=item.name or ("ID: "..itemId)
+            local shortName=itemName:sub(1,20)..(#itemName>20 and ".." or "")
+            local resultBtn=makeBtn(searchResultsFrame,ri,"♪ "..shortName,nil,function()
+                bgMusic.SoundId="rbxassetid://"..itemId
+                bgMusic:Play()
+                musicStatusLbl.Text="♪ "..shortName
+            end)
+            resultBtn.TextXAlignment=Enum.TextXAlignment.Left
+            ri+=1
+        end
+    end)
+end); o6+=1
+
+makeSep(page6,o6); o6+=1
+makeLbl(page6,o6,"  PLAYBACK"); o6+=1
+
+local volLbl=Instance.new("TextLabel",page6)
+volLbl.LayoutOrder=o6; o6+=1
+volLbl.Size=UDim2.new(1,0,0,11); volLbl.BackgroundTransparency=1
+volLbl.TextColor3=Color3.fromRGB(130,130,130); volLbl.TextSize=8
+volLbl.Font=Enum.Font.GothamMedium; volLbl.Text="Volume: 0.5"
+makeRow(page6,o6,"Vol -","Vol +",
+    function() bgMusic.Volume=math.clamp(math.round((bgMusic.Volume-0.1)*10)/10,0,1); volLbl.Text="Volume: "..bgMusic.Volume end,
+    function() bgMusic.Volume=math.clamp(math.round((bgMusic.Volume+0.1)*10)/10,0,1); volLbl.Text="Volume: "..bgMusic.Volume end
+); o6+=1
+
+local loopMusicBtn
+loopMusicBtn=makeBtn(page6,o6,"🔁 Loop: ON",Color3.fromRGB(25,80,120),function()
+    bgMusic.Looped=not bgMusic.Looped
+    loopMusicBtn.Text="🔁 Loop: "..(bgMusic.Looped and "ON" or "OFF")
+    loopMusicBtn.BackgroundColor3=bgMusic.Looped and Color3.fromRGB(25,80,120) or Color3.fromRGB(40,40,40)
+end); o6+=1
+
+makeRow(page6,o6,"⏸ Pause","⏹ Stop",
+    function() bgMusic:Pause(); musicStatusLbl.Text="Paused" end,
+    function() bgMusic:Stop(); musicStatusLbl.Text="Stopped" end
+); o6+=1
+
+-- Input --
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode==Enum.KeyCode.R then
+        if not recording then startRecording() else stopRecording() end
+    elseif input.KeyCode==Enum.KeyCode.P then playReplay()
+    elseif input.KeyCode==Enum.KeyCode.F then enableFreecam(not FreecamEnabled)
+    elseif input.KeyCode==Enum.KeyCode.X then cleanupGhosts()
+    elseif input.KeyCode==Enum.KeyCode.Left then
+        playbackSpeed=0; playbackIndex=math.clamp(playbackIndex-1,1,#replayData)
+    elseif input.KeyCode==Enum.KeyCode.Right then
+        playbackSpeed=0; playbackIndex=math.clamp(playbackIndex+1,1,#replayData)
+    elseif input.KeyCode==Enum.KeyCode.J then
+        if not camPathRecording then startCamPathRec() else stopCamPathRec() end
+    elseif input.KeyCode==Enum.KeyCode.K then
+        playCamPath()
+    elseif input.KeyCode==Enum.KeyCode.L then
+        camPathPlaying=false; camPathRecording=false; camPathFrames={}
+        camPathRecBtn.Text="⏺ Record Path"
+        camPathRecBtn.BackgroundColor3=Color3.fromRGB(40,40,40)
+        camPathStatusLbl.Text="Path: 0 frames"
+    end
+end)
+
+-- Nav --
+local currentPage=1
+local navRow=Instance.new("Frame",frame)
+navRow.LayoutOrder=2; navRow.Size=UDim2.new(1,0,0,20); navRow.BackgroundTransparency=1
+local navLayout=Instance.new("UIListLayout",navRow)
+navLayout.FillDirection=Enum.FillDirection.Horizontal
+navLayout.HorizontalAlignment=Enum.HorizontalAlignment.Center
+navLayout.Padding=UDim.new(0,3)
+
+local backBtn=Instance.new("TextButton",navRow)
+backBtn.Size=UDim2.new(0.48,0,1,0); backBtn.BackgroundColor3=Color3.fromRGB(35,35,35)
+backBtn.TextColor3=Color3.fromRGB(180,180,180); backBtn.TextSize=8
+backBtn.Font=Enum.Font.GothamMedium; backBtn.Text="← Back"
+backBtn.AutoButtonColor=true; backBtn.Visible=false
+Instance.new("UICorner",backBtn).CornerRadius=UDim.new(0,4)
+
+local nextBtn=Instance.new("TextButton",navRow)
+nextBtn.Size=UDim2.new(0.48,0,1,0); nextBtn.BackgroundColor3=Color3.fromRGB(35,35,35)
+nextBtn.TextColor3=Color3.fromRGB(180,180,180); nextBtn.TextSize=8
+nextBtn.Font=Enum.Font.GothamMedium; nextBtn.Text="Page 2 →"
+nextBtn.AutoButtonColor=true
+Instance.new("UICorner",nextBtn).CornerRadius=UDim.new(0,4)
+
+local function showPage(n)
+    currentPage=n
+    page1.Visible=n==1; page2.Visible=n==2; page3.Visible=n==3
+    page4.Visible=n==4; page5.Visible=n==5; page6.Visible=n==6
+    backBtn.Visible=n>1; nextBtn.Visible=n<6
+    local labels={"Page 2 →","Page 3 →","Page 4 →","Page 5 →","Page 6 →"}
+    if n<6 then nextBtn.Text=labels[n] end
+end
+
+nextBtn.MouseButton1Click:Connect(function() showPage(currentPage+1) end)
+backBtn.MouseButton1Click:Connect(function() showPage(currentPage-1) end)
 
 minimizeBtn.MouseButton1Click:Connect(function()
-    minimized = not minimized
-    page1.Visible = not minimized
-    page2.Visible = false
-    page3.Visible = false
-    page4.Visible = false
-    if not minimized then currentPage = 1 end
-    navRow.Visible = not minimized
-    minimizeBtn.Text = minimized and "▲" or "—"
+    minimized=not minimized
+    page1.Visible=not minimized
+    page2.Visible=false; page3.Visible=false
+    page4.Visible=false; page5.Visible=false; page6.Visible=false
+    if not minimized then currentPage=1 end
+    navRow.Visible=not minimized
+    minimizeBtn.Text=minimized and "▲" or "—"
 end)
 
 closeBtn.MouseButton1Click:Connect(function()
     cleanupGhosts()
-    setNightVision(false)
-    setFog(false)
+    setNightVision(false); setFog(false)
     disableAllWeatherShaders()
     weatherPart:Destroy()
-    cam.FieldOfView = originalFOV
-    motionBlur:Destroy()
-    dofEffect:Destroy()
-    heartbeatCC:Destroy()
+    bgMusic:Stop(); bgMusic:Destroy()
+    cam.FieldOfView=originalFOV
+    motionBlur:Destroy(); dofEffect:Destroy(); heartbeatCC:Destroy()
     sg:Destroy()
 end)
 
-print("A Flashback v17.2 (Client) ready! R = Record P = Play F = Freecam X = Clear ←/→ = Step")
+print("A Flashback v18 ready! (Client) R = Record P = Play F = Freecam X = Clear ←/→ = Step J = PathRec K = PlayPath L = ClearPath")
