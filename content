@@ -852,16 +852,21 @@ mkB(pg,o[i],"▶ Play by ID",nil,function()local id=mib.Text:match("%d+");if not
 mkS(pg,o[i]);o[i]+=1;mkL(pg,o[i],"  Search Audio");o[i]+=1
 local msb=mkTB(pg,o[i],"Search audio name...");o[i]+=1
 local srf=Instance.new("Frame",pg);srf.LayoutOrder=o[i];o[i]+=1;srf.Size=UDim2.new(1,0,0,0);srf.AutomaticSize=Enum.AutomaticSize.Y;srf.BackgroundTransparency=1
-do local l=Instance.new("UIListLayout",srf);l.Padding=UDim.new(0,2);l.SortOrder=Enum.SortOrder.LayoutOrder end
 mkB(pg,o[i],"🔍 Search",nil,function()
 	local q=msb.Text;if q==""then return end;msl.Text="Searching..."
 	for _,c in ipairs(srf:GetChildren())do if not c:IsA("UIListLayout")then c:Destroy()end end
 	task.spawn(function()
-		local ok,res=pcall(function()return HS:JSONDecode(game:HttpGet("https://apis.roproxy.com/toolbox-service/v1/audio?keyword="..HS:UrlEncode(q).."&limit=5"))end)
-		if not ok or not res or not res.data or #res.data==0 then msl.Text="No results.";return end
-		msl.Text="Found "..#res.data.." results"
-		for ri,item in ipairs(res.data)do
-			local id=tostring(item.asset.id);local nm=(item.asset.name or id):sub(1,20)
+		local ok,res=pcall(function()
+			local url="https://search.roblox.com/catalog/json?Category=9&Keyword="..HS:UrlEncode(q).."&ResultsPerPage=5"
+			local data=HS:JSONDecode(game:HttpGet(url))
+			return data
+		end)
+		if not ok or not res or not res.Data or not res.Data.Items or #res.Data.Items==0 then
+			msl.Text="No results.";return
+		end
+		msl.Text="Found "..#res.Data.Items.." results"
+		for ri,item in ipairs(res.Data.Items)do
+			local id=tostring(item.AssetId);local nm=(item.Name or id):sub(1,20)
 			local rb2=mkB(srf,ri-1,"♪ "..nm,nil,function()FB.bgMusic.SoundId="rbxassetid://"..id;FB.bgMusic:Play();msl.Text="♪ "..nm end)
 			rb2.TextXAlignment=Enum.TextXAlignment.Left
 		end
